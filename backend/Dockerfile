@@ -3,6 +3,8 @@ FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV MPLCONFIGDIR=/tmp/matplotlib
+ENV HF_HOME=/app/.cache/huggingface
+ENV WHISPER_MODEL=base
 
 WORKDIR /app
 
@@ -15,6 +17,10 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+
+# Cache the Whisper model during build when the network allows it.
+# If the download is unavailable, runtime fallback still keeps demos working.
+RUN python scripts/predownload_whisper.py || true
 
 EXPOSE 8000
 

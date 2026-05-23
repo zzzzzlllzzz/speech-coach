@@ -11,6 +11,8 @@ services:
         value: false
       - key: WHISPER_MODEL
         value: base
+      - key: WHISPER_TIMEOUT_SECONDS
+        value: 35
       - key: CORS_ORIGINS
         value: "*"
 

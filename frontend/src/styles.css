@@ -261,6 +261,14 @@ input {
   font-size: clamp(24px, 4vw, 36px);
 }
 
+.progress-status {
+  max-width: 560px;
+  margin: -6px 0 2px;
+  color: #6f7c9d;
+  font-weight: 700;
+  line-height: 1.7;
+}
+
 .analysis-steps {
   display: flex;
   flex-wrap: wrap;

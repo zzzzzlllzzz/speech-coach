@@ -59,8 +59,12 @@ export default function App() {
 
     setProgress(8);
     const timer = window.setInterval(() => {
-      setProgress((value) => Math.min(value + 8, 92));
-    }, 260);
+      setProgress((value) => {
+        if (value < 70) return Math.min(value + 5, 70);
+        if (value < 88) return Math.min(value + 2, 88);
+        return Math.min(value + 1, 96);
+      });
+    }, 900);
 
     return () => window.clearInterval(timer);
   }, [stage]);
