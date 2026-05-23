@@ -17,7 +17,7 @@ app_port: 7860
 
 - 多模态分析：同时分析语音文本和视频动作。
 - 可解释评分：使用清晰规则生成六维评分和综合分。
-- 稳定演示：Vosk、MediaPipe 或 FFmpeg 出错时自动 fallback/mock。
+- 稳定演示：阿里云 ASR、Vosk、MediaPipe 或 FFmpeg 出错时自动 fallback/mock。
 - 比赛友好：支持演示模式、进度展示、报告打印导出。
 - 训练导向：建议聚焦可改进动作，例如停顿、看镜头、减少低头、优化手势。
 
@@ -25,8 +25,8 @@ app_port: 7860
 
 - 上传演讲视频，支持 `mp4`、`mov`、`avi`、`mkv`。
 - 支持 1GB 以内视频；大文件或长视频会自动启用快速分析，避免公网后端上传超时。
-- 提取音频并转写中文演讲文本。
-- 大视频快速分析模式不会上传完整原视频，优先使用浏览器端 MediaPipe 指标生成报告，语音文字区域显示“未检测到文本”。
+- 提取音频并转写中英文演讲文本。
+- 大视频快速分析模式不会上传完整原视频，会先在浏览器端提取 16k 单声道 wav 音频上传用于语音转写，同时使用浏览器端 MediaPipe 指标生成报告。
 - 统计字数、语速、口头禅、逻辑连接词。
 - 分析人脸可见、镜头交流近似比例、低头次数、身体稳定、手势活跃度、遮脸次数和表情变化幅度。
 - 生成内容表达、语音表现、手势表现、姿态稳定、镜头交流和综合表现评分。
@@ -38,7 +38,7 @@ app_port: 7860
 - 前端：React + Vite + MediaPipe Tasks Vision WASM
 - 后端：Python + FastAPI
 - 音频提取：FFmpeg / imageio-ffmpeg
-- 语音识别：Vosk 中文离线模型
+- 语音识别：阿里云智能语音交互实时识别优先，Vosk 中英文离线模型兜底
 - 视频处理：OpenCV
 - 姿态、手势、人脸分析：浏览器端 MediaPipe Tasks Vision，后端 Python MediaPipe / OpenCV 兜底
 - 图表：Recharts
@@ -62,7 +62,7 @@ app_port: 7860
 - `backend/.env.example`：后端 CORS 和模型参数示例。
 - `backend/Dockerfile`：后端容器部署文件，包含 FFmpeg 安装。
 
-部署后，用户访问前端网址，上传视频即可生成训练报告。小视频会上传到后端提取音频；大文件或长视频会自动走快速分析，不上传完整原视频，减少等待和失败。
+部署后，用户访问前端网址，上传视频即可生成训练报告。小视频会上传到后端提取音频；大文件或长视频会自动走快速分析，只上传浏览器提取出的音频和视觉指标，减少等待和失败。
 
 ### 推荐部署步骤：Hugging Face Spaces + Vercel
 
@@ -217,6 +217,9 @@ npm run build
 CORS_ORIGINS=https://你的前端域名
 USE_MOCK=false
 VOSK_MODEL_PATH=/app/models/vosk-model-small-cn-0.22
+VOSK_EN_MODEL_PATH=/app/models/vosk-model-small-en-us-0.15
+ALIYUN_NLS_APP_KEY=你的阿里云智能语音交互AppKey
+ALIYUN_NLS_TOKEN=你的阿里云NLS Token
 ```
 
 如果比赛现场只需要稳定演示，可以临时设置：
@@ -239,9 +242,18 @@ Windows 可以从 FFmpeg 官网下载安装，并将 `ffmpeg` 和 `ffprobe` 加�
 
 项目也安装了 `imageio-ffmpeg` 作为备用方案。如果系统 FFmpeg 不可用，程序会尝试使用备用 FFmpeg；如果仍失败，会自动切换到 mock 文本报告。
 
-## 语音识别说明
+## 阿里云语音识别说明
 
-语音识别使用 Vosk 中文离线小模型，适合 Render 免费实例快速完成真实转写。后端 Docker 构建时会尝试预下载 Vosk 中文模型，减少第一次分析等待。
+语音识别会优先使用阿里云智能语音交互实时识别。前端会把视频音频转换为 `wav / 16000 Hz / mono`，后端再以 PCM 流方式发送给阿里云识别，适合中英文演讲稿转写。
+
+需要在后端部署环境中配置：
+
+```bash
+ALIYUN_NLS_APP_KEY=你的阿里云智能语音交互AppKey
+ALIYUN_NLS_TOKEN=你的阿里云NLS Token
+```
+
+如果未配置阿里云参数，或阿里云识别失败，系统会自动尝试 Vosk 中文模型；中文无结果时再尝试 Vosk 英文模型。后端 Docker 构建时会尝试预下载 Vosk 中英文小模型，减少第一次分析等待。
 
 如果模型下载失败、音频中没有清晰人声或运行出错，系统不会崩溃。报告页会显示“未检测到文本”，不会用演示稿冒充真实转写。
 

@@ -4,7 +4,6 @@ import logging
 import os
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi import Body
 from fastapi.middleware.cors import CORSMiddleware
 
 from services.audio_service import extract_audio
@@ -22,7 +21,9 @@ logger = logging.getLogger("speech_coach_ai")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 ALLOWED_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv"}
+ALLOWED_AUDIO_EXTENSIONS = {".wav"}
 MAX_UPLOAD_SIZE = 200 * 1024 * 1024
+MAX_FAST_AUDIO_SIZE = 80 * 1024 * 1024
 
 
 def get_cors_origins() -> list[str]:
@@ -41,6 +42,14 @@ def validate_upload(file: UploadFile) -> None:
     if suffix not in ALLOWED_EXTENSIONS:
         allowed = "、".join(sorted(ALLOWED_EXTENSIONS))
         raise HTTPException(status_code=400, detail=f"仅支持 {allowed} 格式的视频文件。")
+
+
+def validate_audio_upload(file: UploadFile | None) -> None:
+    if file is None:
+        return
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in ALLOWED_AUDIO_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="快速分析音频仅支持 wav 格式。")
 
 app.add_middleware(
     CORSMiddleware,
@@ -133,17 +142,39 @@ async def analyze_video(
 
 
 @app.post("/api/analyze-fast")
-async def analyze_fast(payload: dict = Body(...)) -> dict:
+async def analyze_fast(
+    filename: str = Form("large-video.mp4"),
+    file_size: str = Form("0"),
+    video_info: str = Form("{}"),
+    client_visual_metrics: str | None = Form(None),
+    audio_file: UploadFile | None = File(None),
+) -> dict:
+    audio_path = None
     try:
-        filename = payload.get("filename") or "large-video.mp4"
-        video_info = payload.get("video_info") or {}
-        visual_metrics = payload.get("client_visual_metrics") or {}
+        validate_audio_upload(audio_file)
+        parsed_video_info = json.loads(video_info) if video_info else {}
+        visual_metrics = json.loads(client_visual_metrics) if client_visual_metrics else {}
 
         report = build_mock_report(filename)
-        duration = video_info.get("duration") or 120
-        transcript = analyze_text(text="", duration=duration, mock_mode=True)
-        transcript["mock_reason"] = "未检测到文本"
-        transcript["source"] = "fallback"
+        duration = parsed_video_info.get("duration") or 120
+
+        transcription = {"text": "", "mock_mode": True, "source": "fallback", "error": "未检测到文本"}
+        if audio_file is not None:
+            audio_path = await save_upload_file(audio_file)
+            if audio_path.stat().st_size > MAX_FAST_AUDIO_SIZE:
+                raise HTTPException(status_code=400, detail="提取后的音频不能超过 80MB。")
+            transcription = transcribe_audio(audio_path)
+
+        transcript = analyze_text(
+            text=transcription["text"],
+            duration=duration,
+            mock_mode=transcription["mock_mode"],
+        )
+        transcript["source"] = transcription.get("source", "fallback")
+        if audio_path:
+            transcript["audio_file"] = audio_path.name
+        if transcription["mock_mode"]:
+            transcript["mock_reason"] = transcription["error"] or "未检测到文本"
 
         if not visual_metrics:
             visual_metrics = build_mock_visual_metrics("大视频快速分析未收到浏览器端视觉指标。")
@@ -159,21 +190,21 @@ async def analyze_fast(payload: dict = Body(...)) -> dict:
         report["video_info"] = {
             "filename": filename,
             "duration": duration,
-            "fps": video_info.get("fps") or 30,
-            "width": video_info.get("width") or 1280,
-            "height": video_info.get("height") or 720,
+            "fps": parsed_video_info.get("fps") or 30,
+            "width": parsed_video_info.get("width") or 1280,
+            "height": parsed_video_info.get("height") or 720,
             "mock_mode": False,
             "fast_mode": True,
         }
         report = enrich_report(report, transcript, visual_metrics, scores)
         report["analysis_status"]["upload"] = {
             "mode": "fast",
-            "message": "大文件已启用快速分析：未上传完整原视频，优先使用浏览器端视觉指标生成报告。",
+            "message": "大文件已启用快速分析：未上传完整原视频，已优先上传音频用于语音转写。",
         }
         return report
     except Exception as exc:
         logger.exception("快速分析失败，返回 fallback 报告")
         return build_fallback_report(
-            payload.get("filename", "large-video.mp4") if isinstance(payload, dict) else "large-video.mp4",
+            filename,
             f"快速分析失败：{exc}",
         )

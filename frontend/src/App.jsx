@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { analyzeFastVideo, analyzeVideo } from "./api";
+import { extractAudioWavFromVideo } from "./audioExtraction";
 import { analyzeVideoWithMediaPipe } from "./mediapipeVideoAnalysis";
 import UploadPanel from "./components/UploadPanel";
 import ProgressPanel from "./components/ProgressPanel";
@@ -119,8 +120,13 @@ export default function App() {
       const videoInfo = await readVideoMetadata(selectedFile);
       const useFastMode =
         selectedFile.size > FAST_MODE_FILE_SIZE || videoInfo.duration > FAST_MODE_DURATION;
+      let audioFile = null;
+      if (useFastMode) {
+        setProgress(82);
+        audioFile = await extractAudioWavFromVideo(selectedFile);
+      }
       const result = useFastMode
-        ? await analyzeFastVideo({ file: selectedFile, clientVisualMetrics, videoInfo })
+        ? await analyzeFastVideo({ file: selectedFile, clientVisualMetrics, videoInfo, audioFile })
         : await analyzeVideo(selectedFile, clientVisualMetrics);
       setProgress(100);
       window.setTimeout(() => {

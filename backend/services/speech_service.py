@@ -3,6 +3,8 @@ import json
 import os
 import wave
 
+from services.aliyun_asr_service import aliyun_asr_enabled, transcribe_with_aliyun
+
 
 MOCK_TRANSCRIPT_TEXT = (
     "大家好，今天我演讲的主题是人工智能如何帮助我们提升公众表达能力。"
@@ -11,7 +13,7 @@ MOCK_TRANSCRIPT_TEXT = (
     "最后，我认为 AI 不是替代我们表达，而是帮助我们成为更好的表达者。"
 )
 
-_VOSK_MODEL = None
+_VOSK_MODELS: dict[str, object] = {}
 
 
 def build_mock_transcription(reason: str | None = None) -> dict:
@@ -23,25 +25,29 @@ def build_mock_transcription(reason: str | None = None) -> dict:
     }
 
 
-def _get_vosk_model():
-    global _VOSK_MODEL
-    if _VOSK_MODEL is not None:
-        return _VOSK_MODEL
+def _get_vosk_model(language: str):
+    if language in _VOSK_MODELS:
+        return _VOSK_MODELS[language]
 
-    model_path = Path(os.getenv("VOSK_MODEL_PATH", "models/vosk-model-small-cn-0.22"))
+    default_paths = {
+        "zh": "models/vosk-model-small-cn-0.22",
+        "en": "models/vosk-model-small-en-us-0.15",
+    }
+    env_name = "VOSK_MODEL_PATH" if language == "zh" else "VOSK_EN_MODEL_PATH"
+    model_path = Path(os.getenv(env_name, default_paths[language]))
     if not model_path.exists():
-        raise FileNotFoundError(f"Vosk 中文模型不存在：{model_path}")
+        raise FileNotFoundError(f"Vosk {language} 模型不存在：{model_path}")
 
     from vosk import Model
 
-    _VOSK_MODEL = Model(str(model_path))
-    return _VOSK_MODEL
+    _VOSK_MODELS[language] = Model(str(model_path))
+    return _VOSK_MODELS[language]
 
 
-def _transcribe_with_vosk(audio_path: Path) -> dict:
+def _transcribe_with_vosk(audio_path: Path, language: str) -> dict:
     from vosk import KaldiRecognizer
 
-    model = _get_vosk_model()
+    model = _get_vosk_model(language)
     chunks: list[str] = []
 
     with wave.open(str(audio_path), "rb") as audio:
@@ -64,14 +70,15 @@ def _transcribe_with_vosk(audio_path: Path) -> dict:
         if final_text:
             chunks.append(final_text)
 
-    text = "".join("".join(chunks).split())
+    text = " ".join(chunk.strip() for chunk in chunks if chunk.strip())
+    text = text.replace("  ", " ").strip()
     if not text:
         return build_mock_transcription("未检测到文本")
 
     return {
         "text": text,
         "mock_mode": False,
-        "source": "vosk",
+        "source": f"vosk_{language}",
         "error": None,
     }
 
@@ -83,7 +90,19 @@ def transcribe_audio(audio_path: Path | None) -> dict:
     if audio_path is None or not audio_path.exists():
         return build_mock_transcription("未检测到文本")
 
+    if aliyun_asr_enabled():
+        aliyun_result = transcribe_with_aliyun(audio_path)
+        if not aliyun_result["mock_mode"]:
+            return aliyun_result
+
     try:
-        return _transcribe_with_vosk(audio_path)
+        zh_result = _transcribe_with_vosk(audio_path, "zh")
+        if not zh_result["mock_mode"]:
+            return zh_result
+    except Exception:
+        pass
+
+    try:
+        return _transcribe_with_vosk(audio_path, "en")
     except Exception:
         return build_mock_transcription("未检测到文本")
