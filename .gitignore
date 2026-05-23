@@ -1,0 +1,11 @@
+backend/venv/
+backend/venv-test/
+frontend/node_modules/
+frontend/dist/
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/outputs/*
+!backend/outputs/.gitkeep
+__pycache__/
+*.pyc
+.DS_Store
