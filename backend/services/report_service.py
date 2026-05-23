@@ -241,7 +241,7 @@ def enrich_report(report: dict, transcript: dict, visual_metrics: dict, scores: 
             "mode": "mock" if transcript.get("mock_mode") else "real",
             "message": transcript.get("mock_reason")
             or (
-                "faster-whisper tiny 模型已完成真实语音识别。"
+                "Vosk / faster-whisper 已完成真实语音识别。"
                 if not transcript.get("mock_mode")
                 else "语音识别已使用演示文本。"
             ),

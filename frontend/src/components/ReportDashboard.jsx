@@ -35,6 +35,7 @@ const visualMetricKeys = [
 
 function getSpeechSourceLabel(transcript) {
   if (transcript.mock_mode) return "Fallback 文本";
+  if (transcript.source === "vosk") return "Vosk 离线真实识别";
   if (transcript.source === "faster_whisper") return "faster-whisper 真实识别";
   return "真实语音识别";
 }

@@ -5,6 +5,7 @@ ENV PYTHONUNBUFFERED=1
 ENV MPLCONFIGDIR=/tmp/matplotlib
 ENV HF_HOME=/app/.cache/huggingface
 ENV WHISPER_MODEL=tiny
+ENV VOSK_MODEL_PATH=/app/models/vosk-model-small-cn-0.22
 
 WORKDIR /app
 
@@ -18,9 +19,9 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY . .
 
-# Cache the Whisper model during build when the network allows it.
+# Cache a lightweight Chinese ASR model during build when the network allows it.
 # If the download is unavailable, runtime fallback still keeps demos working.
-RUN python scripts/predownload_whisper.py || true
+RUN python scripts/download_vosk_model.py || true
 
 EXPOSE 8000
 
