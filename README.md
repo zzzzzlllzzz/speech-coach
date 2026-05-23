@@ -1,3 +1,12 @@
+---
+title: Speech Coach AI API
+emoji: 🎤
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+---
+
 # 言镜 AI：多模态公众表达训练助手
 
 言镜 AI 是一个面向高中 AI 应用比赛展示的 Web 应用。用户上传 1 到 3 分钟演讲视频后，系统会从语言、语音、动作、手势、姿态和镜头交流等角度生成一份可视化训练报告。
@@ -15,8 +24,9 @@
 ## 功能说明
 
 - 上传演讲视频，支持 `mp4`、`mov`、`avi`、`mkv`。
-- 限制上传文件大小，默认 200MB 以内。
+- 支持 1GB 以内视频；大文件或长视频会自动启用快速分析，避免公网后端上传超时。
 - 提取音频并转写中文演讲文本。
+- 大视频快速分析模式不会上传完整原视频，优先使用浏览器端 MediaPipe 指标生成报告，语音文字区域显示“未检测到文本”。
 - 统计字数、语速、口头禅、逻辑连接词。
 - 分析人脸可见、镜头交流近似比例、低头次数、身体稳定、手势活跃度、遮脸次数和表情变化幅度。
 - 生成内容表达、语音表现、手势表现、姿态稳定、镜头交流和综合表现评分。
@@ -37,22 +47,50 @@
 
 如果希望“把作品链接发给任何一个人，点开就能用”，需要把前端和后端都部署到公网：
 
-- 前端：部署到 Vercel、Netlify、Cloudflare Pages 等静态网站平台。
-- 后端：部署到支持 Python、FFmpeg 和较大依赖包的云服务，例如 Render、Railway、Fly.io、云服务器或 Hugging Face Spaces Docker。
+- 前端：推荐部署到 Vercel。
+- 后端：推荐部署到 Hugging Face Spaces Docker。
 - 前端通过 `VITE_API_BASE_URL` 连接公网后端。
 - 后端通过 `CORS_ORIGINS` 允许公网前端访问。
 
 本项目已经准备了部署所需的配置：
 
-- `render.yaml`：Render Blueprint，一次性创建前端 Static Site 和后端 Web Service。
+- `Dockerfile`：Hugging Face Spaces Docker 后端部署文件。
+- `vercel.json`：Vercel 前端部署文件。
+- `render.yaml`：Render Blueprint 备用配置。
 - `frontend/.env.example`：前端公网 API 地址示例。
 - `frontend/public/mediapipe/`：浏览器端 MediaPipe WASM 和 `.task` 模型文件，部署后从你自己的网站加载。
 - `backend/.env.example`：后端 CORS 和模型参数示例。
 - `backend/Dockerfile`：后端容器部署文件，包含 FFmpeg 安装。
 
-部署后，用户访问前端网址，上传视频，浏览器会把视频发送到公网后端分析，再返回训练报告。
+部署后，用户访问前端网址，上传视频即可生成训练报告。小视频会上传到后端提取音频；大文件或长视频会自动走快速分析，不上传完整原视频，减少等待和失败。
 
-### Render Blueprint 部署步骤
+### 推荐部署步骤：Hugging Face Spaces + Vercel
+
+后端：
+
+1. 打开 Hugging Face，创建一个新的 Space。
+2. Space SDK 选择 `Docker`。
+3. 连接或上传这个 GitHub 仓库。
+4. Space 会读取根目录 `Dockerfile`，启动 FastAPI 后端。
+5. 后端健康检查地址通常是：
+
+```text
+https://你的用户名-你的space名.hf.space/health
+```
+
+前端：
+
+1. 打开 Vercel，导入同一个 GitHub 仓库。
+2. 使用根目录的 `vercel.json` 部署前端。
+3. 在 Vercel 项目环境变量中设置：
+
+```bash
+VITE_API_BASE_URL=https://你的用户名-你的space名.hf.space
+```
+
+4. 重新部署 Vercel，最终把 Vercel 网址发给用户即可。
+
+### Render Blueprint 部署步骤（备用）
 
 推荐使用 Blueprint 方式部署：
 

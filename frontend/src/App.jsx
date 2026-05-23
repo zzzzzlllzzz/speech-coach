@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { analyzeVideo } from "./api";
+import { analyzeFastVideo, analyzeVideo } from "./api";
 import { analyzeVideoWithMediaPipe } from "./mediapipeVideoAnalysis";
 import UploadPanel from "./components/UploadPanel";
 import ProgressPanel from "./components/ProgressPanel";
 import ReportDashboard from "./components/ReportDashboard";
 
-const MAX_FILE_SIZE = 200 * 1024 * 1024;
+const MAX_FILE_SIZE = 1024 * 1024 * 1024;
+const FAST_MODE_FILE_SIZE = 80 * 1024 * 1024;
+const FAST_MODE_DURATION = 180;
 const ALLOWED_EXTENSIONS = [".mp4", ".mov", ".avi", ".mkv"];
 
 function validateVideoFile(file) {
@@ -17,10 +19,35 @@ function validateVideoFile(file) {
   }
 
   if (file.size > MAX_FILE_SIZE) {
-    return "视频文件不能超过 200MB，请压缩后再上传。";
+    return "视频文件不能超过 1GB，请压缩后再上传。";
   }
 
   return "";
+}
+
+function readVideoMetadata(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    const cleanup = () => URL.revokeObjectURL(url);
+
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      const info = {
+        duration: Number.isFinite(video.duration) ? Math.round(video.duration * 100) / 100 : 0,
+        width: video.videoWidth || 1280,
+        height: video.videoHeight || 720,
+        fps: 30,
+      };
+      cleanup();
+      resolve(info);
+    };
+    video.onerror = () => {
+      cleanup();
+      resolve({ duration: 0, width: 1280, height: 720, fps: 30 });
+    };
+    video.src = url;
+  });
 }
 
 export default function App() {
@@ -89,7 +116,12 @@ export default function App() {
       }
 
       setProgress(78);
-      const result = await analyzeVideo(selectedFile, clientVisualMetrics);
+      const videoInfo = await readVideoMetadata(selectedFile);
+      const useFastMode =
+        selectedFile.size > FAST_MODE_FILE_SIZE || videoInfo.duration > FAST_MODE_DURATION;
+      const result = useFastMode
+        ? await analyzeFastVideo({ file: selectedFile, clientVisualMetrics, videoInfo })
+        : await analyzeVideo(selectedFile, clientVisualMetrics);
       setProgress(100);
       window.setTimeout(() => {
         setReport(result);

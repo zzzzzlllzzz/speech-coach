@@ -107,6 +107,13 @@ export default function ReportDashboard({ report, onReset }) {
       )}
 
       <div className="source-grid">
+        {analysisStatus.upload && (
+          <article className="source-card">
+            <span>上传处理</span>
+            <strong>大视频快速分析</strong>
+            <p>{analysisStatus.upload.message}</p>
+          </article>
+        )}
         <article className={report.transcript.mock_mode ? "source-card mock" : "source-card"}>
           <span>语音识别来源</span>
           <strong>{getSpeechSourceLabel(report.transcript)}</strong>

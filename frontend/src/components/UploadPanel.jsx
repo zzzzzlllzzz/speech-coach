@@ -38,7 +38,7 @@ export default function UploadPanel({ error, file, onAnalyze, onFileSelect, prev
           />
           <span className="upload-icon">+</span>
           <strong>{file ? file.name : "上传视频文件"}</strong>
-          <small>支持格式：mp4、mov、avi、mkv · 200MB 以内 · 建议长度：1 到 3 分钟</small>
+          <small>支持格式：mp4、mov、avi、mkv · 1GB 以内 · 大视频会自动启用快速分析</small>
         </label>
 
         {previewUrl && <VideoPreview src={previewUrl} />}

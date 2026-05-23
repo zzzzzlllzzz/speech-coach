@@ -4,10 +4,11 @@ import logging
 import os
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Body
 from fastapi.middleware.cors import CORSMiddleware
 
 from services.audio_service import extract_audio
-from services.gesture_service import analyze_visual_metrics
+from services.gesture_service import analyze_visual_metrics, build_mock_visual_metrics
 from services.report_service import build_fallback_report, build_mock_report, enrich_report
 from services.scoring_service import calculate_scores
 from services.speech_service import transcribe_audio
@@ -129,3 +130,50 @@ async def analyze_video(
         logger.exception("分析失败，返回 fallback 报告")
         filename = saved_path.name if saved_path else (file.filename or "demo.mp4")
         return build_fallback_report(filename, f"后端分析失败，已自动切换到演示报告：{exc}")
+
+
+@app.post("/api/analyze-fast")
+async def analyze_fast(payload: dict = Body(...)) -> dict:
+    try:
+        filename = payload.get("filename") or "large-video.mp4"
+        video_info = payload.get("video_info") or {}
+        visual_metrics = payload.get("client_visual_metrics") or {}
+
+        report = build_mock_report(filename)
+        duration = video_info.get("duration") or 120
+        transcript = analyze_text(text="", duration=duration, mock_mode=True)
+        transcript["mock_reason"] = "未检测到文本"
+        transcript["source"] = "fallback"
+
+        if not visual_metrics:
+            visual_metrics = build_mock_visual_metrics("大视频快速分析未收到浏览器端视觉指标。")
+        else:
+            visual_metrics["mock_mode"] = False
+            visual_metrics["fallback_mode"] = visual_metrics.get("fallback_mode", "browser_mediapipe")
+            visual_metrics["analysis_note"] = visual_metrics.get(
+                "analysis_note",
+                "浏览器端 MediaPipe Tasks Vision 已完成大视频快速分析。",
+            )
+
+        scores = calculate_scores(transcript, visual_metrics)
+        report["video_info"] = {
+            "filename": filename,
+            "duration": duration,
+            "fps": video_info.get("fps") or 30,
+            "width": video_info.get("width") or 1280,
+            "height": video_info.get("height") or 720,
+            "mock_mode": False,
+            "fast_mode": True,
+        }
+        report = enrich_report(report, transcript, visual_metrics, scores)
+        report["analysis_status"]["upload"] = {
+            "mode": "fast",
+            "message": "大文件已启用快速分析：未上传完整原视频，优先使用浏览器端视觉指标生成报告。",
+        }
+        return report
+    except Exception as exc:
+        logger.exception("快速分析失败，返回 fallback 报告")
+        return build_fallback_report(
+            payload.get("filename", "large-video.mp4") if isinstance(payload, dict) else "large-video.mp4",
+            f"快速分析失败：{exc}",
+        )
