@@ -240,7 +240,11 @@ def enrich_report(report: dict, transcript: dict, visual_metrics: dict, scores: 
         "speech": {
             "mode": "mock" if transcript.get("mock_mode") else "real",
             "message": transcript.get("mock_reason")
-            or ("Whisper 已完成真实语音识别。" if not transcript.get("mock_mode") else "语音识别已使用演示文本。"),
+            or (
+                "faster-whisper tiny 模型已完成真实语音识别。"
+                if not transcript.get("mock_mode")
+                else "语音识别已使用演示文本。"
+            ),
         },
         "visual": {
             "mode": "mock" if visual_metrics.get("mock_mode") else visual_metrics.get("fallback_mode", "real"),

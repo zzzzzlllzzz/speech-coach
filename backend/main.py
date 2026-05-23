@@ -114,6 +114,7 @@ async def analyze_video(
 
         if transcription["mock_mode"]:
             transcript["mock_reason"] = transcription["error"] or audio_result.error
+        transcript["source"] = transcription.get("source", "faster_whisper")
 
         logger.info("评分")
         scores = calculate_scores(transcript, visual_metrics)

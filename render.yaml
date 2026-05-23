@@ -10,9 +10,9 @@ services:
       - key: USE_MOCK
         value: false
       - key: WHISPER_MODEL
-        value: base
+        value: tiny
       - key: WHISPER_TIMEOUT_SECONDS
-        value: 35
+        value: 85
       - key: CORS_ORIGINS
         value: "*"
 

@@ -33,6 +33,12 @@ const visualMetricKeys = [
   "expression_change_score",
 ];
 
+function getSpeechSourceLabel(transcript) {
+  if (transcript.mock_mode) return "Fallback 文本";
+  if (transcript.source === "faster_whisper") return "faster-whisper 真实识别";
+  return "真实语音识别";
+}
+
 function formatMetric(key, value, transcript) {
   if (value === null || value === undefined) {
     return "未检测";
@@ -103,7 +109,7 @@ export default function ReportDashboard({ report, onReset }) {
       <div className="source-grid">
         <article className={report.transcript.mock_mode ? "source-card mock" : "source-card"}>
           <span>语音识别来源</span>
-          <strong>{report.transcript.mock_mode ? "Fallback 文本" : "Whisper 真实识别"}</strong>
+          <strong>{getSpeechSourceLabel(report.transcript)}</strong>
           <p>{analysisStatus.speech?.message}</p>
         </article>
         <article className={report.visual_metrics.mock_mode ? "source-card mock" : "source-card"}>

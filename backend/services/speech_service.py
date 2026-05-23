@@ -11,12 +11,14 @@ MOCK_TRANSCRIPT_TEXT = (
 )
 
 _TRANSCRIBE_EXECUTOR = ThreadPoolExecutor(max_workers=1)
+_WHISPER_MODELS: dict[str, object] = {}
 
 
 def build_mock_transcription(reason: str | None = None) -> dict:
     return {
         "text": MOCK_TRANSCRIPT_TEXT,
         "mock_mode": True,
+        "source": "fallback",
         "error": reason,
     }
 
@@ -24,10 +26,17 @@ def build_mock_transcription(reason: str | None = None) -> dict:
 def _transcribe_with_whisper(audio_path: Path, model_size: str) -> dict:
     from faster_whisper import WhisperModel
 
-    model = WhisperModel(model_size, device="cpu", compute_type="int8")
+    if model_size not in _WHISPER_MODELS:
+        _WHISPER_MODELS[model_size] = WhisperModel(model_size, device="cpu", compute_type="int8")
+
+    model = _WHISPER_MODELS[model_size]
     segments, _info = model.transcribe(
         str(audio_path),
         language="zh",
+        beam_size=1,
+        best_of=1,
+        temperature=0,
+        condition_on_previous_text=False,
         vad_filter=True,
     )
     text = "".join(segment.text.strip() for segment in segments).strip()
@@ -38,11 +47,12 @@ def _transcribe_with_whisper(audio_path: Path, model_size: str) -> dict:
     return {
         "text": text,
         "mock_mode": False,
+        "source": "faster_whisper",
         "error": None,
     }
 
 
-def transcribe_audio(audio_path: Path | None, model_size: str = "base") -> dict:
+def transcribe_audio(audio_path: Path | None, model_size: str = "tiny") -> dict:
     if os.getenv("SPEECH_COACH_FORCE_MOCK") == "1":
         return build_mock_transcription("已通过 SPEECH_COACH_FORCE_MOCK=1 强制启用 mock 文本。")
 
@@ -51,7 +61,7 @@ def transcribe_audio(audio_path: Path | None, model_size: str = "base") -> dict:
 
     try:
         model_size = os.getenv("WHISPER_MODEL", model_size)
-        timeout_seconds = int(os.getenv("WHISPER_TIMEOUT_SECONDS", "35"))
+        timeout_seconds = int(os.getenv("WHISPER_TIMEOUT_SECONDS", "85"))
         future = _TRANSCRIBE_EXECUTOR.submit(_transcribe_with_whisper, audio_path, model_size)
         return future.result(timeout=timeout_seconds)
     except TimeoutError:

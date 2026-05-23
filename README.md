@@ -178,7 +178,8 @@ npm run build
 ```bash
 CORS_ORIGINS=https://你的前端域名
 USE_MOCK=false
-WHISPER_MODEL=base
+WHISPER_MODEL=tiny
+WHISPER_TIMEOUT_SECONDS=85
 ```
 
 如果比赛现场只需要稳定演示，可以临时设置：
@@ -203,14 +204,15 @@ Windows 可以从 FFmpeg 官网下载安装，并将 `ffmpeg` 和 `ffprobe` 加�
 
 ## Whisper 说明
 
-语音识别使用 `faster-whisper`，默认模型为 `base`，语言为中文 `zh`。首次运行可能需要下载模型，下载速度取决于网络环境。
+语音识别使用 `faster-whisper`，默认模型为 `tiny`，语言为中文 `zh`。这个模型比 `base` 更轻，适合 Render 免费实例优先完成真实转写。后端 Docker 构建时会尝试预下载模型，减少第一次分析等待。
 
-如果模型下载失败、显存不足、CPU 性能不足或运行出错，系统不会崩溃，会自动返回 mock 文本并在报告中显示演示模式提示。
+如果模型下载失败、CPU 性能不足、识别超时或运行出错，系统不会崩溃，会自动返回 mock 文本并在报告中显示演示模式提示。
 
-可切换模型：
+如果你后续升级 Render 或换到更强服务器，可以切换到更高精度模型：
 
 ```bash
-export WHISPER_MODEL=small
+export WHISPER_MODEL=base
+export WHISPER_TIMEOUT_SECONDS=120
 ```
 
 ## MediaPipe 说明
@@ -270,7 +272,7 @@ uvicorn main:app --reload --port 8000
    请先进入项目目录：`cd /Users/zlz/Documents/AI大赛/speech-coach-ai`。
 
 2. Whisper 第一次运行很慢  
-   首次可能下载模型。比赛现场可使用 `USE_MOCK=true`。
+   后端镜像会尝试预下载 `tiny` 模型。如果 Render 构建时网络不稳定，首次运行仍可能下载模型。建议比赛演示使用 30 秒到 1 分钟的清晰视频。
 
 3. MediaPipe 没检测到人  
    可能与光线、角度、距离或遮挡有关。系统会自动 fallback/mock。
