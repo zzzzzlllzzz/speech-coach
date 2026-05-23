@@ -8,7 +8,7 @@
 
 - 多模态分析：同时分析语音文本和视频动作。
 - 可解释评分：使用清晰规则生成六维评分和综合分。
-- 稳定演示：Whisper、MediaPipe 或 FFmpeg 出错时自动 fallback/mock。
+- 稳定演示：Vosk、MediaPipe 或 FFmpeg 出错时自动 fallback/mock。
 - 比赛友好：支持演示模式、进度展示、报告打印导出。
 - 训练导向：建议聚焦可改进动作，例如停顿、看镜头、减少低头、优化手势。
 
@@ -28,7 +28,7 @@
 - 前端：React + Vite + MediaPipe Tasks Vision WASM
 - 后端：Python + FastAPI
 - 音频提取：FFmpeg / imageio-ffmpeg
-- 语音识别：Vosk 中文离线模型 + faster-whisper 备用
+- 语音识别：Vosk 中文离线模型
 - 视频处理：OpenCV
 - 姿态、手势、人脸分析：浏览器端 MediaPipe Tasks Vision，后端 Python MediaPipe / OpenCV 兜底
 - 图表：Recharts
@@ -178,8 +178,6 @@ npm run build
 ```bash
 CORS_ORIGINS=https://你的前端域名
 USE_MOCK=false
-WHISPER_MODEL=tiny
-WHISPER_TIMEOUT_SECONDS=85
 VOSK_MODEL_PATH=/app/models/vosk-model-small-cn-0.22
 ```
 
@@ -205,16 +203,9 @@ Windows 可以从 FFmpeg 官网下载安装，并将 `ffmpeg` 和 `ffprobe` 加�
 
 ## 语音识别说明
 
-语音识别优先使用 Vosk 中文离线小模型，适合 Render 免费实例快速完成真实转写；如果 Vosk 不可用，再使用 `faster-whisper` 的 `tiny` 模型作为备用。后端 Docker 构建时会尝试预下载 Vosk 中文模型，减少第一次分析等待。
+语音识别使用 Vosk 中文离线小模型，适合 Render 免费实例快速完成真实转写。后端 Docker 构建时会尝试预下载 Vosk 中文模型，减少第一次分析等待。
 
-如果模型下载失败、CPU 性能不足、识别超时或运行出错，系统不会崩溃，会自动返回 mock 文本并在报告中显示演示模式提示。报告页会显示“Vosk 离线真实识别”“faster-whisper 真实识别”或“Fallback 文本”，方便判断本次是否真的识别了上传视频内容。
-
-如果你后续升级 Render 或换到更强服务器，可以切换到更高精度模型：
-
-```bash
-export WHISPER_MODEL=base
-export WHISPER_TIMEOUT_SECONDS=120
-```
+如果模型下载失败、音频中没有清晰人声或运行出错，系统不会崩溃。报告页会显示“未检测到文本”，不会用演示稿冒充真实转写。
 
 ## MediaPipe 说明
 
@@ -252,7 +243,7 @@ $env:USE_MOCK="true"
 uvicorn main:app --reload --port 8000
 ```
 
-如果 `USE_MOCK=true`，后端不执行 Whisper、MediaPipe 或 OpenCV 分析，直接返回完整演示报告。如果 `USE_MOCK=false` 或未设置，后端会正常尝试真实分析：Whisper 失败时只 fallback 文本，MediaPipe 失败时优先使用 OpenCV 真实近似分析，最后才使用 mock 指标。
+如果 `USE_MOCK=true`，后端不执行 Vosk、MediaPipe 或 OpenCV 分析，直接返回完整演示报告。如果 `USE_MOCK=false` 或未设置，后端会正常尝试真实分析：Vosk 未检测到清晰文本时显示“未检测到文本”，MediaPipe 失败时优先使用 OpenCV 真实近似分析，最后才使用 mock 指标。
 
 ## 评分规则
 
@@ -273,7 +264,7 @@ uvicorn main:app --reload --port 8000
    请先进入项目目录：`cd /Users/zlz/Documents/AI大赛/speech-coach-ai`。
 
 2. 语音识别第一次运行很慢  
-   后端镜像会尝试预下载 Vosk 中文模型。如果 Render 构建时网络不稳定，首次运行仍可能回退到 Whisper 或 fallback。建议比赛演示使用 30 秒到 1 分钟的清晰视频。
+   后端镜像会尝试预下载 Vosk 中文模型。如果 Render 构建时网络不稳定，首次运行可能无法识别。建议比赛演示使用 30 秒到 1 分钟的清晰人声视频。
 
 3. MediaPipe 没检测到人  
    可能与光线、角度、距离或遮挡有关。系统会自动 fallback/mock。
@@ -281,8 +272,8 @@ uvicorn main:app --reload --port 8000
 4. FFmpeg 不可用  
    安装系统 FFmpeg，或依赖 `imageio-ffmpeg` 备用方案。失败时仍会返回演示报告。
 
-5. 页面显示 Fallback 文本或 OpenCV 真实近似分析  
-   说明某个模块没有跑满能力。Fallback 文本是演示估算；OpenCV 真实近似分析仍然来自上传视频，只是没有使用 MediaPipe 关键点。
+5. 页面显示未检测到文本或 OpenCV 真实近似分析  
+   说明某个模块没有跑满能力。未检测到文本表示音频转写没有拿到可用文字；OpenCV 真实近似分析仍然来自上传视频，只是没有使用 MediaPipe 关键点。
 
 ## 比赛演示流程
 

@@ -9,10 +9,6 @@ services:
     envVars:
       - key: USE_MOCK
         value: false
-      - key: WHISPER_MODEL
-        value: tiny
-      - key: WHISPER_TIMEOUT_SECONDS
-        value: 85
       - key: VOSK_MODEL_PATH
         value: /app/models/vosk-model-small-cn-0.22
       - key: CORS_ORIGINS

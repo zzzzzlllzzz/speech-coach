@@ -34,9 +34,8 @@ const visualMetricKeys = [
 ];
 
 function getSpeechSourceLabel(transcript) {
-  if (transcript.mock_mode) return "Fallback 文本";
+  if (transcript.mock_mode) return "未检测到文本";
   if (transcript.source === "vosk") return "Vosk 离线真实识别";
-  if (transcript.source === "faster_whisper") return "faster-whisper 真实识别";
   return "真实语音识别";
 }
 
@@ -226,7 +225,7 @@ export default function ReportDashboard({ report, onReset }) {
           </div>
         </div>
 
-        <p>{report.transcript.text}</p>
+        <p>{report.transcript.mock_mode ? "未检测到文本" : report.transcript.text}</p>
       </article>
     </section>
   );

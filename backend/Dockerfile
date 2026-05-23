@@ -3,8 +3,6 @@ FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV MPLCONFIGDIR=/tmp/matplotlib
-ENV HF_HOME=/app/.cache/huggingface
-ENV WHISPER_MODEL=tiny
 ENV VOSK_MODEL_PATH=/app/models/vosk-model-small-cn-0.22
 
 WORKDIR /app
