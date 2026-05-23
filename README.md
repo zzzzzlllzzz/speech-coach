@@ -46,6 +46,7 @@
 
 - `render.yaml`：Render Blueprint，一次性创建前端 Static Site 和后端 Web Service。
 - `frontend/.env.example`：前端公网 API 地址示例。
+- `frontend/public/mediapipe/`：浏览器端 MediaPipe WASM 和 `.task` 模型文件，部署后从你自己的网站加载。
 - `backend/.env.example`：后端 CORS 和模型参数示例。
 - `backend/Dockerfile`：后端容器部署文件，包含 FFmpeg 安装。
 
@@ -218,7 +219,7 @@ export WHISPER_MODEL=small
 
 当前版本会优先在浏览器端使用 MediaPipe Tasks Vision WASM 分析用户上传的视频帧，得到人脸、姿态和手部关键点指标。浏览器端分析成功后，前端会把 `visual_metrics` 随视频一起提交给后端生成报告。
 
-浏览器端 MediaPipe 所需的 WASM 和模型文件会从官方 CDN 加载，用户不需要额外安装软件。
+浏览器端 MediaPipe 所需的 WASM 和模型文件已经放在 `frontend/public/mediapipe/`，部署前端时会一起发布，不依赖用户额外安装软件，也不依赖外部 CDN。
 
 如果浏览器端 MediaPipe 失败，后端会继续尝试 Python 版 MediaPipe。如果后端 MediaPipe 也无法正常运行，系统会使用 OpenCV 对真实视频帧做降级分析，估算人脸可见比例、近似镜头交流、低头次数、画面晃动、手势活跃度、手部可见比例、遮脸次数和表情变化程度。只有 OpenCV 也无法读取视频时，才会使用 mock 视觉指标。
 
