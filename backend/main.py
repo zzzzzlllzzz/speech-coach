@@ -6,6 +6,7 @@ import os
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
+from services.aliyun_asr_service import get_aliyun_asr_status
 from services.audio_service import extract_audio
 from services.gesture_service import analyze_visual_metrics, build_mock_visual_metrics
 from services.report_service import build_fallback_report, build_mock_report, enrich_report
@@ -63,6 +64,11 @@ app.add_middleware(
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/debug/asr")
+def debug_asr(check_token: bool = False) -> dict:
+    return get_aliyun_asr_status(check_token=check_token)
 
 
 @app.post("/api/analyze")

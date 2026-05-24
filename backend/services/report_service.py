@@ -229,6 +229,20 @@ def build_summary(scores: dict) -> str:
     return "本次演讲已经完成基本表达，但在结构清晰度、语音节奏和身体表现方面建议继续训练。"
 
 
+def _speech_status_message(transcript: dict) -> str:
+    if transcript.get("mock_mode"):
+        return transcript.get("mock_reason") or "未检测到文本。"
+
+    source = transcript.get("source")
+    if source == "aliyun_nls":
+        return "阿里云智能语音交互已完成真实语音识别。"
+    if source == "vosk_zh":
+        return "Vosk 中文模型已完成离线语音识别。"
+    if source == "vosk_en":
+        return "Vosk 英文模型已完成离线语音识别。"
+    return "已完成真实语音识别。"
+
+
 def enrich_report(report: dict, transcript: dict, visual_metrics: dict, scores: dict) -> dict:
     report["transcript"] = transcript
     report["visual_metrics"] = visual_metrics
@@ -239,12 +253,7 @@ def enrich_report(report: dict, transcript: dict, visual_metrics: dict, scores: 
     report["analysis_status"] = {
         "speech": {
             "mode": "mock" if transcript.get("mock_mode") else "real",
-            "message": transcript.get("mock_reason")
-            or (
-                "Vosk 已完成真实语音识别。"
-                if not transcript.get("mock_mode")
-                else "未检测到文本。"
-            ),
+            "message": _speech_status_message(transcript),
         },
         "visual": {
             "mode": "mock" if visual_metrics.get("mock_mode") else visual_metrics.get("fallback_mode", "real"),

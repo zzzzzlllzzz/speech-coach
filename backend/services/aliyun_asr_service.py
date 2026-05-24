@@ -79,6 +79,41 @@ def get_aliyun_token() -> str:
     return _create_nls_token()
 
 
+def get_aliyun_asr_status(check_token: bool = False) -> dict:
+    try:
+        import nls  # noqa: F401
+
+        sdk_available = True
+        sdk_error = None
+    except Exception as exc:
+        sdk_available = False
+        sdk_error = str(exc)
+
+    status = {
+        "enabled": aliyun_asr_enabled(),
+        "has_app_key": bool(os.getenv("ALIYUN_NLS_APP_KEY")),
+        "has_static_token": bool(os.getenv("ALIYUN_NLS_TOKEN")),
+        "has_access_key_id": bool(os.getenv("ALIYUN_AK_ID")),
+        "has_access_key_secret": bool(os.getenv("ALIYUN_AK_SECRET")),
+        "sdk_available": sdk_available,
+        "sdk_error": sdk_error,
+        "region": os.getenv("ALIYUN_REGION_ID", "cn-shanghai"),
+        "gateway": os.getenv("ALIYUN_NLS_URL", "wss://nls-gateway-cn-shanghai.aliyuncs.com/ws/v1"),
+    }
+
+    if check_token:
+        try:
+            token = get_aliyun_token()
+            status["token_ok"] = bool(token)
+            status["token_error"] = None
+            status["token_expire_time"] = _TOKEN_CACHE.get("expire_time")
+        except Exception as exc:
+            status["token_ok"] = False
+            status["token_error"] = str(exc)
+
+    return status
+
+
 def _collect_text(payload: object) -> list[str]:
     texts: list[str] = []
     if isinstance(payload, dict):
