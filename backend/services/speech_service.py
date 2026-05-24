@@ -90,19 +90,22 @@ def transcribe_audio(audio_path: Path | None) -> dict:
     if audio_path is None or not audio_path.exists():
         return build_mock_transcription("未检测到文本")
 
+    aliyun_error = None
     if aliyun_asr_enabled():
         aliyun_result = transcribe_with_aliyun(audio_path)
         if not aliyun_result["mock_mode"]:
             return aliyun_result
+        aliyun_error = aliyun_result.get("error") or "阿里云未返回识别文本"
 
     try:
         zh_result = _transcribe_with_vosk(audio_path, "zh")
         if not zh_result["mock_mode"]:
             return zh_result
-    except Exception:
-        pass
+    except Exception as exc:
+        aliyun_error = aliyun_error or f"Vosk 中文识别失败：{exc}"
 
     try:
         return _transcribe_with_vosk(audio_path, "en")
-    except Exception:
-        return build_mock_transcription("未检测到文本")
+    except Exception as exc:
+        reason = aliyun_error or f"Vosk 英文识别失败：{exc}"
+        return build_mock_transcription(reason)
