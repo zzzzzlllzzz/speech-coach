@@ -9,11 +9,45 @@ def _format_issue_time(seconds: float) -> str:
     return f"{seconds // 60:02d}:{seconds % 60:02d}"
 
 
+def _duration_seconds(transcript: dict) -> float:
+    try:
+        return max(0, float(transcript.get("duration") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _parse_issue_time(value: str | None) -> float | None:
+    if not value:
+        return None
+    parts = str(value).split(":")
+    try:
+        if len(parts) == 2:
+            return int(parts[0]) * 60 + int(parts[1])
+        if len(parts) == 3:
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _clamp_issue_time(transcript: dict, value: str | None, default_ratio: float = 0.25) -> str:
+    duration = _duration_seconds(transcript)
+    parsed = _parse_issue_time(value)
+    if parsed is None:
+        parsed = duration * default_ratio if duration else 0
+
+    if duration > 0:
+        latest = max(0, duration - 1) if duration >= 2 else duration
+        parsed = min(parsed, latest)
+    return _format_issue_time(parsed)
+
+
 def _issue_time(transcript: dict, ratio: float, fallback: str) -> str:
-    duration = transcript.get("duration")
+    duration = _duration_seconds(transcript)
     if not duration:
-        return fallback
-    return _format_issue_time(float(duration) * ratio)
+        return _clamp_issue_time(transcript, fallback, ratio)
+    latest = max(0, duration - 1) if duration >= 2 else duration
+    return _format_issue_time(min(duration * ratio, latest))
 
 
 def build_mock_report(filename: str) -> dict:
@@ -138,7 +172,7 @@ def build_issues(transcript: dict, visual_metrics: dict) -> list[dict]:
     if not transcript.get("mock_mode") and filler_total > 10:
         issues.append(
             {
-                "time": "00:36",
+                "time": _issue_time(transcript, 0.25, "00:05"),
                 "type": "口头禅",
                 "message": "这一段可能出现较多口头禅，建议用停顿替代表达填充词。",
             }
@@ -165,7 +199,7 @@ def build_issues(transcript: dict, visual_metrics: dict) -> list[dict]:
     for event_time in visual_metrics.get("head_down_events", [])[:2]:
         issues.append(
             {
-                "time": event_time,
+                "time": _clamp_issue_time(transcript, event_time, 0.3),
                 "type": "低头",
                 "message": "检测到这一时刻头部朝向偏低，可能影响表达稳定感，建议减少长时间看稿。",
             }
@@ -174,7 +208,7 @@ def build_issues(transcript: dict, visual_metrics: dict) -> list[dict]:
     for event_time in visual_metrics.get("face_block_events", [])[:2]:
         issues.append(
             {
-                "time": event_time,
+                "time": _clamp_issue_time(transcript, event_time, 0.35),
                 "type": "面部遮挡",
                 "message": "检测到手部靠近面部，建议演讲时保持面部区域清晰可见。",
             }
@@ -210,7 +244,7 @@ def build_issues(transcript: dict, visual_metrics: dict) -> list[dict]:
     if not issues:
         issues.append(
             {
-                "time": "00:30",
+                "time": _issue_time(transcript, 0.5, "00:05"),
                 "type": "表达节奏",
                 "message": "本次未检测到突出问题，建议继续保持稳定节奏并优化重点停顿。",
             }
