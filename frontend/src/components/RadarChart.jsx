@@ -13,6 +13,7 @@ const LABELS = {
   gesture: "手势",
   posture: "姿态",
   camera_contact: "镜头",
+  overall: "综合",
 };
 
 export default function RadarChart({ scores }) {
