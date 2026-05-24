@@ -128,7 +128,7 @@ def _collect_text(payload: object) -> list[str]:
     return texts
 
 
-def _read_pcm_chunks(audio_path: Path, chunk_size: int = 3200):
+def _read_pcm_chunks(audio_path: Path, chunk_size: int = 640):
     with wave.open(str(audio_path), "rb") as audio:
         if audio.getnchannels() != 1 or audio.getframerate() != 16000:
             raise ValueError("阿里云实时识别需要 16000 Hz 单声道 wav 音频。")
@@ -162,23 +162,28 @@ def transcribe_with_aliyun(audio_path: Path) -> dict:
     errors: list[str] = []
     done = threading.Event()
 
-    def on_sentence_end(message, *args):
+    def append_text(message):
         try:
             payload = json.loads(message) if isinstance(message, str) else message
             texts.extend(_collect_text(payload))
         except Exception:
             pass
 
+    def on_result_changed(message, *args):
+        append_text(message)
+
+    def on_sentence_end(message, *args):
+        append_text(message)
+
     def on_completed(message, *args):
-        try:
-            payload = json.loads(message) if isinstance(message, str) else message
-            texts.extend(_collect_text(payload))
-        except Exception:
-            pass
+        append_text(message)
         done.set()
 
     def on_error(message, *args):
         errors.append(str(message))
+        done.set()
+
+    def on_close(*args):
         done.set()
 
     url = os.getenv("ALIYUN_NLS_URL", "wss://nls-gateway-cn-shanghai.aliyuncs.com/ws/v1")
@@ -196,17 +201,22 @@ def transcribe_with_aliyun(audio_path: Path) -> dict:
         url=url,
         token=token,
         appkey=os.getenv("ALIYUN_NLS_APP_KEY"),
+        on_result_changed=on_result_changed,
         on_sentence_end=on_sentence_end,
         on_completed=on_completed,
         on_error=on_error,
+        on_close=on_close,
     )
 
     try:
         started = transcriber.start(
             aformat="pcm",
+            sample_rate=16000,
             enable_intermediate_result=False,
             enable_punctuation_prediction=True,
             enable_inverse_text_normalization=True,
+            ping_interval=8,
+            ping_timeout=None,
         )
         if started is False:
             return {
@@ -218,10 +228,10 @@ def transcribe_with_aliyun(audio_path: Path) -> dict:
 
         for chunk in _read_pcm_chunks(audio_path):
             transcriber.send_audio(chunk)
-            time.sleep(0.01)
+            time.sleep(0.02)
 
-        transcriber.stop()
-        done.wait(timeout=8)
+        transcriber.stop(timeout=10)
+        done.wait(timeout=12)
     except Exception as exc:
         return {
             "text": "",
@@ -230,7 +240,8 @@ def transcribe_with_aliyun(audio_path: Path) -> dict:
             "error": f"阿里云语音识别失败：{exc}",
         }
 
-    text = "".join(dict.fromkeys(texts)).strip()
+    unique_texts = [text.strip() for text in dict.fromkeys(texts) if text.strip()]
+    text = "".join(unique_texts).strip()
     if not text:
         return {
             "text": "",

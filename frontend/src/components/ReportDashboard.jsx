@@ -119,7 +119,7 @@ export default function ReportDashboard({ report, onReset }) {
         <article className={report.transcript.mock_mode ? "source-card mock" : "source-card"}>
           <span>语音识别来源</span>
           <strong>{getSpeechSourceLabel(report.transcript)}</strong>
-          <p>{analysisStatus.speech?.message}</p>
+          <p>{analysisStatus.speech?.message || report.transcript.mock_reason}</p>
         </article>
         <article className={report.visual_metrics.mock_mode ? "source-card mock" : "source-card"}>
           <span>视觉分析来源</span>
