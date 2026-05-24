@@ -219,7 +219,8 @@ USE_MOCK=false
 VOSK_MODEL_PATH=/app/models/vosk-model-small-cn-0.22
 VOSK_EN_MODEL_PATH=/app/models/vosk-model-small-en-us-0.15
 ALIYUN_NLS_APP_KEY=你的阿里云智能语音交互AppKey
-ALIYUN_NLS_TOKEN=你的阿里云NLS Token
+ALIYUN_AK_ID=你的阿里云AccessKey ID
+ALIYUN_AK_SECRET=你的阿里云AccessKey Secret
 ```
 
 如果比赛现场只需要稳定演示，可以临时设置：
@@ -250,8 +251,11 @@ Windows 可以从 FFmpeg 官网下载安装，并将 `ffmpeg` 和 `ffprobe` 加�
 
 ```bash
 ALIYUN_NLS_APP_KEY=你的阿里云智能语音交互AppKey
-ALIYUN_NLS_TOKEN=你的阿里云NLS Token
+ALIYUN_AK_ID=你的阿里云AccessKey ID
+ALIYUN_AK_SECRET=你的阿里云AccessKey Secret
 ```
+
+后端会自动使用 `AccessKey ID / Secret` 向阿里云换取临时 NLS Token，并在 Token 快过期时自动刷新。也可以临时直接配置 `ALIYUN_NLS_TOKEN`，但不推荐长期使用，因为 NLS Token 会过期。
 
 如果未配置阿里云参数，或阿里云识别失败，系统会自动尝试 Vosk 中文模型；中文无结果时再尝试 Vosk 英文模型。后端 Docker 构建时会尝试预下载 Vosk 中英文小模型，减少第一次分析等待。
 
