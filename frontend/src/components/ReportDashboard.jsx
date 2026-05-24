@@ -70,10 +70,11 @@ export default function ReportDashboard({ report, onReset }) {
     gesture_activity: report.visual_metrics.gesture_activity,
     body_sway_score: report.visual_metrics.body_sway_score,
   };
+  const structureAnalysis = report.transcript.structure_analysis || {};
   const analysisFlags = [
-    ["开头", report.transcript.has_opening],
-    ["结尾", report.transcript.has_ending],
-    ["主题句", report.transcript.has_topic],
+    ["开头", report.transcript.has_opening, structureAnalysis.opening?.reason],
+    ["结尾", report.transcript.has_ending, structureAnalysis.ending?.reason],
+    ["主题句", report.transcript.has_topic, structureAnalysis.topic?.reason],
   ];
   const visualMode = analysisStatus.visual?.mode || (report.visual_metrics.mock_mode ? "mock" : "real");
   const visualSourceLabel =
@@ -226,12 +227,19 @@ export default function ReportDashboard({ report, onReset }) {
           <div>
             <h3>结构提示</h3>
             <div className="flag-list">
-              {analysisFlags.map(([label, enabled]) => (
-                <span className={enabled ? "flag enabled" : "flag"} key={label}>
+              {analysisFlags.map(([label, enabled, reason]) => (
+                <span className={enabled ? "flag enabled" : "flag"} key={label} title={reason || ""}>
                   {label}：{enabled ? "有" : "未检测到"}
                 </span>
               ))}
             </div>
+            {analysisFlags.some(([, , reason]) => reason) && (
+              <ul className="structure-reasons">
+                {analysisFlags.map(([label, , reason]) =>
+                  reason ? <li key={label}>{label}：{reason}</li> : null
+                )}
+              </ul>
+            )}
           </div>
         </div>
 

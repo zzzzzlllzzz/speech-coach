@@ -1,5 +1,7 @@
 import re
 
+from services.deepseek_service import call_deepseek_json, deepseek_enabled
+
 
 FILLER_WORDS = ["嗯", "啊", "呃", "然后", "就是", "那个", "这个", "其实", "怎么说"]
 ENGLISH_FILLER_WORDS = ["um", "uh", "like", "you know", "actually", "basically"]
@@ -126,6 +128,86 @@ def count_english_terms(text: str, words: list[str]) -> dict[str, int]:
     return counts
 
 
+def _rule_structure_analysis(text: str) -> dict:
+    lower_text = text.lower()
+    opening_part = text[:90]
+    ending_part = text[-90:]
+    lower_opening = opening_part.lower()
+    lower_ending = ending_part.lower()
+
+    has_opening = (
+        any(word in opening_part for word in ["大家好", "各位老师", "各位同学", "各位评委", "老师好", "同学们好"])
+        or any(word in lower_opening for word in ["hello", "good morning", "good afternoon", "today i"])
+        or bool(re.search(r"(今天|这次|本次).{0,12}(分享|介绍|演讲|汇报|说明)", opening_part))
+    )
+    has_topic = (
+        any(word in text for word in TOPIC_WORDS)
+        or any(word in lower_text for word in TOPIC_WORDS)
+        or bool(re.search(r"(主题|题目|观点|内容).{0,12}(是|为|关于)", text))
+        or bool(re.search(r"(我想|我要|今天|这次|本次).{0,16}(讲|介绍|分享|说明|汇报).{0,18}(是|关于|为什么|如何|怎样)", text))
+        or bool(re.search(r"\b(topic|talk about|speech is about|share with you|presentation is about)\b", lower_text))
+    )
+    has_ending = (
+        any(word in ending_part for word in ["谢谢大家", "我的演讲结束", "我的分享结束", "以上就是", "最后", "总之"])
+        or any(word in lower_ending for word in ["thank you", "finally", "in conclusion", "that's all"])
+    )
+
+    return {
+        "opening": {
+            "present": has_opening,
+            "reason": "检测到前段有问候或内容引入。" if has_opening else "前段没有检测到明确问候或内容引入。",
+        },
+        "topic": {
+            "present": has_topic,
+            "reason": "检测到对主题或要分享内容的说明。" if has_topic else "没有检测到明确说明“要讲什么”的主题句。",
+        },
+        "ending": {
+            "present": has_ending,
+            "reason": "检测到末段有总结、收束或感谢。" if has_ending else "末段没有检测到总结、收束或感谢表达。",
+        },
+        "source": "rule",
+        "error": None,
+    }
+
+
+def analyze_structure(text: str, raw_text: str = "") -> dict:
+    if not text.strip():
+        return _rule_structure_analysis("")
+
+    fallback = _rule_structure_analysis(text)
+    if not deepseek_enabled():
+        return fallback
+
+    prompt = (
+        "请判断下面的演讲转写稿是否具备清晰的开头、主题句和结尾。\n"
+        "判断标准：\n"
+        "1. 开头：前段是否有问候、自我引入、背景引入或直接引出内容。\n"
+        "2. 主题句：是否明确说明今天要讲、分享、介绍或表达的核心内容。\n"
+        "3. 结尾：末段是否有总结、收束、感谢或明显结束语。\n"
+        "4. 不要因为文本中偶然出现“最后”等词就误判，要结合上下文。\n"
+        "5. 只返回 JSON，格式如下：\n"
+        "{\"opening\":{\"present\":true,\"reason\":\"...\"},"
+        "\"topic\":{\"present\":true,\"reason\":\"...\"},"
+        "\"ending\":{\"present\":true,\"reason\":\"...\"}}\n\n"
+        f"整理后文本：{text}\n\n原始 ASR 文本：{raw_text or text}"
+    )
+    try:
+        payload = call_deepseek_json(prompt, max_tokens=500)
+        result = {}
+        for key in ["opening", "topic", "ending"]:
+            item = payload.get(key) or {}
+            result[key] = {
+                "present": bool(item.get("present")),
+                "reason": str(item.get("reason") or fallback[key]["reason"])[:80],
+            }
+        result["source"] = "deepseek"
+        result["error"] = None
+        return result
+    except Exception as exc:
+        fallback["error"] = str(exc)
+        return fallback
+
+
 def analyze_text(text: str, duration: float | int | None, mock_mode: bool = False) -> dict:
     raw_text = text or ""
     polished_text = polish_transcript_text(raw_text)
@@ -140,6 +222,7 @@ def analyze_text(text: str, duration: float | int | None, mock_mode: bool = Fals
     raw_lower_text = raw_text.lower()
     filler_words = count_words(raw_text, FILLER_WORDS)
     filler_words.update(count_english_terms(raw_text, ENGLISH_FILLER_WORDS))
+    structure = analyze_structure(analysis_text, raw_text)
 
     return {
         "text": analysis_text,
@@ -151,12 +234,9 @@ def analyze_text(text: str, duration: float | int | None, mock_mode: bool = Fals
         "filler_words": filler_words,
         "logic_words_count": sum(analysis_text.count(word) for word in LOGIC_WORDS)
         + sum(len(re.findall(r"\b" + re.escape(word) + r"\b", lower_text)) for word in ENGLISH_LOGIC_WORDS),
-        "has_opening": any(word in analysis_text for word in OPENING_WORDS)
-        or any(word in lower_text for word in OPENING_WORDS),
-        "has_ending": any(word in analysis_text for word in ENDING_WORDS)
-        or any(word in lower_text for word in ENDING_WORDS),
-        "has_topic": any(word in analysis_text for word in TOPIC_WORDS)
-        or any(word in lower_text for word in TOPIC_WORDS)
-        or any(word in raw_lower_text for word in TOPIC_WORDS),
+        "has_opening": structure["opening"]["present"],
+        "has_ending": structure["ending"]["present"],
+        "has_topic": structure["topic"]["present"] or any(word in raw_lower_text for word in TOPIC_WORDS),
+        "structure_analysis": structure,
         "mock_mode": mock_mode,
     }

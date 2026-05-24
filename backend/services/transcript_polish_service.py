@@ -1,33 +1,12 @@
-import json
-import os
-import re
-import urllib.request
-
+from services.deepseek_service import call_deepseek_json, deepseek_enabled
 from services.text_analysis_service import polish_transcript_text
 
 
 def _deepseek_enabled() -> bool:
-    return bool(os.getenv("DEEPSEEK_API_KEY"))
-
-
-def _extract_json_text(content: str) -> str:
-    content = content.strip()
-    match = re.search(r"\{[\s\S]*\}", content)
-    if not match:
-        return content
-    try:
-        payload = json.loads(match.group(0))
-        return str(payload.get("text") or content).strip()
-    except Exception:
-        return content
+    return deepseek_enabled()
 
 
 def _polish_with_deepseek(raw_text: str) -> dict:
-    api_key = os.getenv("DEEPSEEK_API_KEY")
-    base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-    model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-    timeout = int(os.getenv("DEEPSEEK_TIMEOUT", "20"))
-
     prompt = (
         "你是演讲稿转写校对助手。请根据上下文修正语音识别中的同音错字、错别字、"
         "明显断句错误和重复碎片，让文本成为通顺自然的演讲文字稿。\n"
@@ -39,33 +18,8 @@ def _polish_with_deepseek(raw_text: str) -> dict:
         "5. 只返回 JSON：{\"text\":\"校正后的文字\"}。\n\n"
         f"原始 ASR 文本：{raw_text}"
     )
-    body = json.dumps(
-        {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": "你只输出合法 JSON，不输出解释。"},
-                {"role": "user", "content": prompt},
-            ],
-            "temperature": 0.2,
-            "max_tokens": 1200,
-        }
-    ).encode("utf-8")
-
-    request = urllib.request.Request(
-        f"{base_url.rstrip('/')}/chat/completions",
-        data=body,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        payload = json.loads(response.read().decode("utf-8"))
-
-    content = payload["choices"][0]["message"]["content"]
-    text = _extract_json_text(content)
+    payload = call_deepseek_json(prompt, max_tokens=1200)
+    text = str(payload.get("text") or "").strip()
     text = polish_transcript_text(text)
     if not text:
         raise ValueError("DeepSeek 未返回有效文本")

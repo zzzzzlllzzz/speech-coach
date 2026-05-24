@@ -585,6 +585,14 @@ input {
   background: #e6f7ef;
 }
 
+.structure-reasons {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  color: #66708e;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
 .muted-text {
   margin: 0;
   color: #7a86a1;
