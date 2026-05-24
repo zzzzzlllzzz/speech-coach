@@ -4,6 +4,7 @@ import os
 import wave
 
 from services.aliyun_asr_service import aliyun_asr_enabled, transcribe_with_aliyun
+from services.transcript_polish_service import polish_transcript_with_context
 
 
 MOCK_TRANSCRIPT_TEXT = (
@@ -19,10 +20,28 @@ _VOSK_MODELS: dict[str, object] = {}
 def build_mock_transcription(reason: str | None = None) -> dict:
     return {
         "text": "",
+        "raw_text": "",
         "mock_mode": True,
         "source": "fallback",
+        "polish_source": "none",
+        "polish_error": None,
         "error": reason or "未检测到文本",
     }
+
+
+def _with_polished_text(result: dict) -> dict:
+    if result.get("mock_mode") or not result.get("text"):
+        result.setdefault("raw_text", result.get("text", ""))
+        result.setdefault("polish_source", "none")
+        result.setdefault("polish_error", None)
+        return result
+
+    polish_result = polish_transcript_with_context(result["text"])
+    result["raw_text"] = polish_result["raw_text"]
+    result["text"] = polish_result["text"]
+    result["polish_source"] = polish_result["polish_source"]
+    result["polish_error"] = polish_result["polish_error"]
+    return result
 
 
 def _get_vosk_model(language: str):
@@ -94,18 +113,18 @@ def transcribe_audio(audio_path: Path | None) -> dict:
     if aliyun_asr_enabled():
         aliyun_result = transcribe_with_aliyun(audio_path)
         if not aliyun_result["mock_mode"]:
-            return aliyun_result
+            return _with_polished_text(aliyun_result)
         aliyun_error = aliyun_result.get("error") or "阿里云未返回识别文本"
 
     try:
         zh_result = _transcribe_with_vosk(audio_path, "zh")
         if not zh_result["mock_mode"]:
-            return zh_result
+            return _with_polished_text(zh_result)
     except Exception as exc:
         aliyun_error = aliyun_error or f"Vosk 中文识别失败：{exc}"
 
     try:
-        return _transcribe_with_vosk(audio_path, "en")
+        return _with_polished_text(_transcribe_with_vosk(audio_path, "en"))
     except Exception as exc:
         reason = aliyun_error or f"Vosk 英文识别失败：{exc}"
         return build_mock_transcription(reason)

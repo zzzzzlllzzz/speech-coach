@@ -35,7 +35,8 @@ const visualMetricKeys = [
 
 function getSpeechSourceLabel(transcript) {
   if (transcript.mock_mode) return "未检测到文本";
-  if (transcript.source === "aliyun_nls") return "阿里云 ASR 真实识别";
+  const polished = transcript.polish_source === "deepseek" ? " + AI 上下文校正" : "";
+  if (transcript.source === "aliyun_nls") return `阿里云 ASR 真实识别${polished}`;
   if (transcript.source === "vosk_zh") return "Vosk 中文离线识别";
   if (transcript.source === "vosk_en") return "Vosk 英文离线识别";
   return "真实语音识别";

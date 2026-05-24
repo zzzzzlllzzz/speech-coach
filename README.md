@@ -221,6 +221,7 @@ VOSK_EN_MODEL_PATH=/app/models/vosk-model-small-en-us-0.15
 ALIYUN_NLS_APP_KEY=你的阿里云智能语音交互AppKey
 ALIYUN_AK_ID=你的阿里云AccessKey ID
 ALIYUN_AK_SECRET=你的阿里云AccessKey Secret
+DEEPSEEK_API_KEY=你的DeepSeek API Key
 ```
 
 如果比赛现场只需要稳定演示，可以临时设置：
@@ -260,6 +261,20 @@ ALIYUN_AK_SECRET=你的阿里云AccessKey Secret
 如果未配置阿里云参数，或阿里云识别失败，系统会自动尝试 Vosk 中文模型；中文无结果时再尝试 Vosk 英文模型。后端 Docker 构建时会尝试预下载 Vosk 中英文小模型，减少第一次分析等待。
 
 如果模型下载失败、音频中没有清晰人声或运行出错，系统不会崩溃。报告页会显示“未检测到文本”，不会用演示稿冒充真实转写。
+
+### 转写稿上下文校正
+
+ASR 原始结果可能出现同音错字、断句不自然或短碎句。后端会先做规则清洗和断句；如果配置了 `DEEPSEEK_API_KEY`，还会调用 DeepSeek 对转写稿进行上下文校正，让演讲稿更通顺。
+
+DeepSeek 只用于校正已有转写，不用于新增观点。接口失败时会自动退回规则整理，不影响报告生成。
+
+可选环境变量：
+
+```bash
+DEEPSEEK_API_KEY=你的DeepSeek API Key
+DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+```
 
 ## MediaPipe 说明
 

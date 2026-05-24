@@ -131,6 +131,9 @@ async def analyze_video(
         if transcription["mock_mode"]:
             transcript["mock_reason"] = transcription["error"] or audio_result.error
         transcript["source"] = transcription.get("source", "fallback")
+        transcript["raw_text"] = transcription.get("raw_text", transcription["text"])
+        transcript["polish_source"] = transcription.get("polish_source", "none")
+        transcript["polish_error"] = transcription.get("polish_error")
 
         logger.info("评分")
         scores = calculate_scores(transcript, visual_metrics)
@@ -177,6 +180,9 @@ async def analyze_fast(
             mock_mode=transcription["mock_mode"],
         )
         transcript["source"] = transcription.get("source", "fallback")
+        transcript["raw_text"] = transcription.get("raw_text", transcription["text"])
+        transcript["polish_source"] = transcription.get("polish_source", "none")
+        transcript["polish_error"] = transcription.get("polish_error")
         if audio_path:
             transcript["audio_file"] = audio_path.name
         if transcription["mock_mode"]:
