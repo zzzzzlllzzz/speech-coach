@@ -85,7 +85,7 @@ function expressionFeature(faceLandmarks, box) {
   ];
 }
 
-export async function analyzeVideoWithMediaPipe(file, onProgress = () => {}) {
+export async function analyzeVideoWithMediaPipe(file, onProgress = () => {}, options = {}) {
   const vision = await FilesetResolver.forVisionTasks(WASM_URL);
   const [poseLandmarker, handLandmarker, faceLandmarker] = await Promise.all([
     PoseLandmarker.createFromOptions(vision, {
@@ -107,7 +107,7 @@ export async function analyzeVideoWithMediaPipe(file, onProgress = () => {}) {
 
   const { video, url } = await createVideo(file);
   const duration = Math.min(video.duration || 0, 180);
-  const frameInterval = 0.5;
+  const frameInterval = options.fastMode || duration > 90 ? 1 : 0.5;
   const frameCount = Math.max(1, Math.ceil(duration / frameInterval));
 
   let faceVisible = 0;

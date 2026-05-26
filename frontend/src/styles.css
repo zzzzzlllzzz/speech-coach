@@ -269,6 +269,15 @@ input {
   line-height: 1.7;
 }
 
+.current-step {
+  padding: 10px 14px;
+  border: 1px solid rgba(98, 88, 246, 0.16);
+  border-radius: 999px;
+  color: #3d45aa;
+  font-weight: 900;
+  background: #eef1ff;
+}
+
 .analysis-steps {
   display: flex;
   flex-wrap: wrap;
@@ -306,7 +315,7 @@ input {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #2563eb, #8b5cf6);
-  transition: width 0.25s ease;
+  transition: width 0.9s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .report-layout {
@@ -511,6 +520,26 @@ input {
   background: #f6f8ff;
 }
 
+.timeline-item.with-frame {
+  grid-template-columns: 132px 1fr;
+  align-items: start;
+}
+
+.issue-frame {
+  width: 132px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #dfe4ff;
+}
+
+.issue-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .timeline-item p {
   margin: 6px 0 0;
   color: #53617f;
@@ -638,6 +667,14 @@ input {
   .text-analysis-grid,
   .source-grid {
     grid-template-columns: 1fr;
+  }
+
+  .timeline-item.with-frame {
+    grid-template-columns: 1fr;
+  }
+
+  .issue-frame {
+    width: 100%;
   }
 
   .upload-card,

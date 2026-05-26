@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
-import { analyzeVideo } from "./api";
+import { analyzeFastVideo, analyzeVideo } from "./api";
+import { extractAudioWavFromVideo } from "./audioExtraction";
 import { analyzeVideoWithMediaPipe } from "./mediapipeVideoAnalysis";
+import { attachIssueFrames, getVideoInfo } from "./videoFrames";
 import UploadPanel from "./components/UploadPanel";
 import ProgressPanel from "./components/ProgressPanel";
 import ReportDashboard from "./components/ReportDashboard";
 
 const MAX_FILE_SIZE = 200 * 1024 * 1024;
+const FAST_MODE_SIZE = 45 * 1024 * 1024;
+const FAST_MODE_DURATION = 90;
 const ALLOWED_EXTENSIONS = [".mp4", ".mov", ".avi", ".mkv"];
 
 function validateVideoFile(file) {
@@ -29,6 +33,7 @@ export default function App() {
   const [report, setReport] = useState(null);
   const [stage, setStage] = useState("upload");
   const [progress, setProgress] = useState(0);
+  const [analysisStep, setAnalysisStep] = useState("准备分析");
   const [error, setError] = useState("");
 
   const handleFileSelect = (file) => {
@@ -60,11 +65,12 @@ export default function App() {
     setProgress(8);
     const timer = window.setInterval(() => {
       setProgress((value) => {
-        if (value < 70) return Math.min(value + 5, 70);
-        if (value < 88) return Math.min(value + 2, 88);
-        return Math.min(value + 1, 96);
+        if (value < 35) return Math.min(value + 1, 35);
+        if (value < 72) return Math.min(value + 0.7, 72);
+        if (value < 92) return Math.min(value + 0.35, 92);
+        return Math.min(value + 0.12, 97);
       });
-    }, 900);
+    }, 450);
 
     return () => window.clearInterval(timer);
   }, [stage]);
@@ -77,19 +83,59 @@ export default function App() {
 
     setError("");
     setStage("analyzing");
+    setProgress(3);
+    setAnalysisStep("正在读取视频信息");
 
     try {
+      const videoInfo = await getVideoInfo(selectedFile).catch(() => ({}));
+      const fastMode =
+        selectedFile.size > FAST_MODE_SIZE || (videoInfo.duration || 0) > FAST_MODE_DURATION;
       let clientVisualMetrics = null;
       try {
+        setAnalysisStep("正在分析人脸、姿态和手势关键点");
         clientVisualMetrics = await analyzeVideoWithMediaPipe(selectedFile, (value) => {
-          setProgress(Math.min(70, Math.max(12, Math.round(value * 0.7))));
-        });
+          setProgress((current) => Math.max(current, Math.min(68, 8 + Math.round(value * 0.55))));
+        }, { fastMode });
       } catch (mediaPipeError) {
         console.warn("浏览器端 MediaPipe 分析失败，改用后端视觉分析。", mediaPipeError);
       }
 
-      setProgress(78);
-      const result = await analyzeVideo(selectedFile, clientVisualMetrics);
+      let result;
+      if (fastMode) {
+        setAnalysisStep("视频较大，正在提取音频并启用快速上传");
+        const audioFile = await extractAudioWavFromVideo(selectedFile);
+        setProgress((current) => Math.max(current, 72));
+        if (audioFile) {
+          setAnalysisStep("正在上传音频和视觉指标，避免整段大视频慢传");
+          result = await analyzeFastVideo({
+            file: selectedFile,
+            clientVisualMetrics,
+            videoInfo,
+            audioFile,
+            onUploadProgress: (ratio) => {
+              setProgress((current) => Math.max(current, 72 + Math.round(ratio * 14)));
+            },
+          });
+        } else {
+          setAnalysisStep("浏览器音频提取失败，正在改用完整视频上传保证转写准确");
+          result = await analyzeVideo(selectedFile, clientVisualMetrics, (ratio) => {
+            setProgress((current) => Math.max(current, 72 + Math.round(ratio * 12)));
+          });
+        }
+      } else {
+        setProgress((current) => Math.max(current, 72));
+        setAnalysisStep("正在上传视频到后端提取音频");
+        result = await analyzeVideo(selectedFile, clientVisualMetrics, (ratio) => {
+          setProgress((current) => Math.max(current, 72 + Math.round(ratio * 12)));
+        });
+      }
+
+      setAnalysisStep("正在匹配问题时间点并截取对应画面");
+      const framedIssues = await attachIssueFrames(selectedFile, result.issues || []).catch(
+        () => result.issues || []
+      );
+      result = { ...result, issues: framedIssues };
+      setAnalysisStep("报告已生成");
       setProgress(100);
       window.setTimeout(() => {
         setReport(result);
@@ -107,6 +153,7 @@ export default function App() {
     setReport(null);
     setStage("upload");
     setProgress(0);
+    setAnalysisStep("准备分析");
     setError("");
   };
 
@@ -122,7 +169,7 @@ export default function App() {
         />
       )}
 
-      {stage === "analyzing" && <ProgressPanel progress={progress} />}
+      {stage === "analyzing" && <ProgressPanel progress={Math.round(progress)} step={analysisStep} />}
 
       {stage === "report" && report && (
         <ReportDashboard report={report} onReset={handleReset} />
