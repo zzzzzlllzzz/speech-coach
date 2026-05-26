@@ -1,0 +1,37 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      PORT: 8000
+      USE_MOCK: ${USE_MOCK:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      ALIYUN_NLS_APP_KEY: ${ALIYUN_NLS_APP_KEY:-}
+      ALIYUN_AK_ID: ${ALIYUN_AK_ID:-}
+      ALIYUN_AK_SECRET: ${ALIYUN_AK_SECRET:-}
+      ALIYUN_REGION_ID: ${ALIYUN_REGION_ID:-cn-shanghai}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_TIMEOUT: ${DEEPSEEK_TIMEOUT:-20}
+    volumes:
+      - backend_uploads:/app/uploads
+      - backend_outputs:/app/outputs
+    expose:
+      - "8000"
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ""
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  backend_uploads:
+  backend_outputs:

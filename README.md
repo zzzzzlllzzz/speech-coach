@@ -45,10 +45,90 @@ app_port: 7860
 
 ## 最终作品上线方式
 
-如果希望“把作品链接发给任何一个人，点开就能用”，需要把前端和后端都部署到公网：
+如果希望“把作品链接发给任何一个人，点开就能用”，并且主要用户在国内，推荐使用阿里云 ECS 或轻量应用服务器，把前端和后端部署到同一台国内服务器。这样用户只需要打开一个国内网址或服务器公网 IP，不依赖 Vercel、Hugging Face、Render 等海外服务。
 
-- 前端：推荐部署到 Vercel。
-- 后端：推荐部署到 Hugging Face Spaces Docker。
+当前项目已经准备好一体化部署配置：
+
+- `docker-compose.aliyun.yml`：同时启动后端 FastAPI 和前端 Nginx。
+- `frontend/Dockerfile`：构建 React 前端并用 Nginx 托管。
+- `frontend/nginx.conf`：前端静态页面 + `/api`、`/health`、`/debug` 反向代理到后端。
+- `.env.aliyun.example`：阿里云语音识别和 DeepSeek 环境变量模板。
+
+推荐最终访问方式：
+
+```text
+http://你的服务器公网IP/
+```
+
+如果绑定了备案域名，也可以使用：
+
+```text
+https://你的域名/
+```
+
+### 国内推荐部署：阿里云一体化 Docker
+
+服务器准备：
+
+1. 购买阿里云 ECS 或轻量应用服务器。
+2. 系统建议选择 Ubuntu 22.04。
+3. 安全组开放 `80` 端口。如果之后配置 HTTPS，再开放 `443` 端口。
+4. 在服务器安装 Docker 和 Docker Compose。
+
+上传并启动项目：
+
+```bash
+git clone https://github.com/zzzzzlllzzz/speech-coach.git
+cd speech-coach
+cp .env.aliyun.example .env
+```
+
+编辑 `.env`，填入你的阿里云语音识别参数：
+
+```bash
+USE_MOCK=false
+CORS_ORIGINS=*
+ALIYUN_NLS_APP_KEY=你的阿里云智能语音交互AppKey
+ALIYUN_AK_ID=你的阿里云AccessKey ID
+ALIYUN_AK_SECRET=你的阿里云AccessKey Secret
+ALIYUN_REGION_ID=cn-shanghai
+DEEPSEEK_API_KEY=你的DeepSeek API Key
+```
+
+启动：
+
+```bash
+docker compose -f docker-compose.aliyun.yml --env-file .env up -d --build
+```
+
+检查后端：
+
+```text
+http://你的服务器公网IP/health
+```
+
+检查阿里云 ASR：
+
+```text
+http://你的服务器公网IP/debug/asr?check_token=true
+```
+
+打开作品：
+
+```text
+http://你的服务器公网IP/
+```
+
+这种部署方式下，前端请求 `/api/analyze` 会自动由 Nginx 转发给同一台服务器里的后端，不需要再填写 `VITE_API_BASE_URL`，也不会遇到跨域问题。
+
+### 海外部署方式（测试备用）
+
+Vercel + Hugging Face Spaces 可以作为开发测试或海外访问备用方案，但不推荐作为国内最终展示地址。国内用户访问海外服务可能出现打不开、上传慢、接口超时等问题。
+
+如果仍使用海外部署：
+
+- 前端：Vercel。
+- 后端：Hugging Face Spaces Docker。
 - 前端通过 `VITE_API_BASE_URL` 连接公网后端。
 - 后端通过 `CORS_ORIGINS` 允许公网前端访问。
 
