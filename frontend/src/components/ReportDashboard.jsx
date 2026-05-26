@@ -34,7 +34,7 @@ const visualMetricKeys = [
 ];
 
 function getSpeechSourceLabel(transcript) {
-  if (transcript.mock_mode) return "未检测到文本";
+  if (transcript?.mock_mode) return "未检测到文本";
   const polished = transcript.polish_source === "deepseek" ? " + AI 上下文校正" : "";
   if (transcript.source === "aliyun_nls") return `阿里云 ASR 真实识别${polished}`;
   if (transcript.source === "vosk_zh") return "Vosk 中文离线识别";
@@ -58,31 +58,36 @@ function formatMetric(key, value, transcript) {
 }
 
 export default function ReportDashboard({ report, onReset }) {
-  const fillerEntries = Object.entries(report.transcript.filler_words || {});
+  const transcript = report.transcript || {};
+  const visualMetrics = report.visual_metrics || {};
+  const scores = report.scores || {};
+  const issues = report.issues || [];
+  const suggestions = report.suggestions || [];
+  const fillerEntries = Object.entries(transcript.filler_words || {});
   const fillerTotal = fillerEntries.reduce((total, [, count]) => total + count, 0);
-  const hasDemoMode = report.transcript.mock_mode || report.visual_metrics.mock_mode;
+  const hasDemoMode = transcript.mock_mode || visualMetrics.mock_mode;
   const analysisStatus = report.analysis_status || {};
   const keyMetrics = {
-    speech_rate: report.transcript.speech_rate,
+    speech_rate: transcript.speech_rate,
     filler_total: fillerTotal,
-    looking_camera_ratio: report.visual_metrics.looking_camera_ratio,
-    head_down_count: report.visual_metrics.head_down_count,
-    gesture_activity: report.visual_metrics.gesture_activity,
-    body_sway_score: report.visual_metrics.body_sway_score,
+    looking_camera_ratio: visualMetrics.looking_camera_ratio,
+    head_down_count: visualMetrics.head_down_count,
+    gesture_activity: visualMetrics.gesture_activity,
+    body_sway_score: visualMetrics.body_sway_score,
   };
-  const structureAnalysis = report.transcript.structure_analysis || {};
+  const structureAnalysis = transcript.structure_analysis || {};
   const analysisFlags = [
-    ["开头", report.transcript.has_opening, structureAnalysis.opening?.reason],
-    ["结尾", report.transcript.has_ending, structureAnalysis.ending?.reason],
-    ["主题句", report.transcript.has_topic, structureAnalysis.topic?.reason],
+    ["开头", transcript.has_opening, structureAnalysis.opening?.reason],
+    ["结尾", transcript.has_ending, structureAnalysis.ending?.reason],
+    ["主题句", transcript.has_topic, structureAnalysis.topic?.reason],
   ];
-  const visualMode = analysisStatus.visual?.mode || (report.visual_metrics.mock_mode ? "mock" : "real");
+  const visualMode = analysisStatus.visual?.mode || (visualMetrics.mock_mode ? "mock" : "real");
   const visualSourceLabel =
     visualMode === "browser_mediapipe"
       ? "浏览器 MediaPipe 真实分析"
       : visualMode === "opencv"
       ? "OpenCV 真实近似分析"
-      : report.visual_metrics.mock_mode
+      : visualMetrics.mock_mode
         ? "Fallback 指标"
         : "MediaPipe 真实分析";
 
@@ -118,12 +123,12 @@ export default function ReportDashboard({ report, onReset }) {
             <p>{analysisStatus.upload.message}</p>
           </article>
         )}
-        <article className={report.transcript.mock_mode ? "source-card mock" : "source-card"}>
+        <article className={transcript.mock_mode ? "source-card mock" : "source-card"}>
           <span>语音识别来源</span>
-          <strong>{getSpeechSourceLabel(report.transcript)}</strong>
-          <p>{analysisStatus.speech?.message || report.transcript.mock_reason}</p>
+          <strong>{getSpeechSourceLabel(transcript)}</strong>
+          <p>{analysisStatus.speech?.message || transcript.mock_reason}</p>
         </article>
-        <article className={report.visual_metrics.mock_mode ? "source-card mock" : "source-card"}>
+        <article className={visualMetrics.mock_mode ? "source-card mock" : "source-card"}>
           <span>视觉分析来源</span>
           <strong>{visualSourceLabel}</strong>
           <p>{analysisStatus.visual?.message}</p>
@@ -132,20 +137,20 @@ export default function ReportDashboard({ report, onReset }) {
 
       <div className="overall-card">
         <span>综合分</span>
-        <strong>{report.scores.overall}</strong>
+        <strong>{scores.overall ?? "未评分"}</strong>
         <p>{report.summary}</p>
       </div>
 
       <div className="score-grid">
         {scoreKeys.map((key) => (
-          <ScoreCard key={key} name={key} value={report.scores[key]} />
+          <ScoreCard key={key} name={key} value={scores[key]} />
         ))}
       </div>
 
       <div className="dashboard-grid">
         <article className="panel chart-panel">
           <h2>六维能力雷达图</h2>
-          <RadarChart scores={report.scores} />
+          <RadarChart scores={scores} />
         </article>
 
         <article className="panel">
@@ -154,7 +159,7 @@ export default function ReportDashboard({ report, onReset }) {
             {keyMetricKeys.map((key) => (
               <div className="metric-item" key={key}>
                 <span>{metricLabels[key]}</span>
-                <strong>{formatMetric(key, keyMetrics[key], report.transcript)}</strong>
+                <strong>{formatMetric(key, keyMetrics[key], transcript)}</strong>
               </div>
             ))}
           </div>
@@ -162,32 +167,32 @@ export default function ReportDashboard({ report, onReset }) {
       </div>
 
       <article className="panel">
-          <div className="panel-title-row">
-            <h2>视觉关键指标</h2>
-            <span className={report.visual_metrics.mock_mode ? "status-pill mock" : "status-pill"}>
-              {report.visual_metrics.mock_mode ? "Mock 模式" : "视觉分析"}
-            </span>
-          </div>
-          <div className="metric-grid">
-            {visualMetricKeys.map((key) => (
-              <div className="metric-item" key={key}>
-                <span>{metricLabels[key]}</span>
-                <strong>{formatMetric(key, report.visual_metrics[key], report.transcript)}</strong>
-              </div>
-            ))}
-          </div>
+        <div className="panel-title-row">
+          <h2>视觉关键指标</h2>
+          <span className={visualMetrics.mock_mode ? "status-pill mock" : "status-pill"}>
+            {visualMetrics.mock_mode ? "Mock 模式" : "视觉分析"}
+          </span>
+        </div>
+        <div className="metric-grid">
+          {visualMetricKeys.map((key) => (
+            <div className="metric-item" key={key}>
+              <span>{metricLabels[key]}</span>
+              <strong>{formatMetric(key, visualMetrics[key], transcript)}</strong>
+            </div>
+          ))}
+        </div>
       </article>
 
       <div className="dashboard-grid">
         <article className="panel">
           <h2>问题时间点</h2>
-          <TimelineIssues issues={report.issues} />
+          <TimelineIssues issues={issues} />
         </article>
 
         <article className="panel">
           <h2>个性化建议</h2>
           <ul className="suggestion-list">
-            {report.suggestions.map((suggestion) => (
+            {suggestions.map((suggestion) => (
               <li key={suggestion}>{suggestion}</li>
             ))}
           </ul>
@@ -197,15 +202,15 @@ export default function ReportDashboard({ report, onReset }) {
       <article className="panel transcript-panel">
         <div className="panel-title-row">
           <h2>演讲文字转写</h2>
-          <span className={report.transcript.mock_mode ? "status-pill mock" : "status-pill"}>
-            {report.transcript.mock_mode ? "Mock 模式" : "真实识别"}
+          <span className={transcript.mock_mode ? "status-pill mock" : "status-pill"}>
+            {transcript.mock_mode ? "Mock 模式" : "真实识别"}
           </span>
         </div>
         <div className="transcript-meta">
-          <span>字数：{report.transcript.word_count}</span>
-          <span>语速：{report.transcript.speech_rate} 字/分钟</span>
-          <span>时长：{report.transcript.duration} 秒</span>
-          <span>逻辑连接词：{report.transcript.logic_words_count}</span>
+          <span>字数：{transcript.word_count ?? 0}</span>
+          <span>语速：{transcript.speech_rate ?? 0} 字/分钟</span>
+          <span>时长：{transcript.duration ?? 0} 秒</span>
+          <span>逻辑连接词：{transcript.logic_words_count ?? 0}</span>
         </div>
 
         <div className="text-analysis-grid">
@@ -243,7 +248,7 @@ export default function ReportDashboard({ report, onReset }) {
           </div>
         </div>
 
-        <p>{report.transcript.mock_mode ? "未检测到文本" : report.transcript.text}</p>
+        <p>{transcript.mock_mode ? "未检测到文本" : transcript.text}</p>
       </article>
     </section>
   );

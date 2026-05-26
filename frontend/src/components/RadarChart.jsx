@@ -19,7 +19,7 @@ const LABELS = {
 export default function RadarChart({ scores }) {
   const data = Object.entries(LABELS).map(([key, label]) => ({
     label,
-    value: scores[key],
+    value: Number.isFinite(scores?.[key]) ? scores[key] : 0,
   }));
 
   return (

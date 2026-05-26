@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from services.aliyun_asr_service import get_aliyun_asr_status
 from services.audio_service import extract_audio
 from services.gesture_service import analyze_visual_metrics, build_mock_visual_metrics
-from services.report_service import build_fallback_report, build_mock_report, enrich_report
+from services.report_service import build_fallback_report, build_report_shell, enrich_report
 from services.scoring_service import calculate_scores
 from services.speech_service import transcribe_audio
 from services.text_analysis_service import analyze_text
@@ -52,6 +52,17 @@ def validate_audio_upload(file: UploadFile | None) -> None:
     if suffix not in ALLOWED_AUDIO_EXTENSIONS:
         raise HTTPException(status_code=400, detail="快速分析音频仅支持 wav 格式。")
 
+
+def parse_json_field(value: str | None, default: dict | None = None) -> dict:
+    if not value:
+        return default or {}
+    try:
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, dict) else (default or {})
+    except json.JSONDecodeError:
+        return default or {}
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=(cors_origins := get_cors_origins()),
@@ -90,21 +101,21 @@ async def analyze_video(
             logger.info("USE_MOCK=true，返回演示模式报告")
             return build_fallback_report(saved_path.name, "USE_MOCK=true，已启用完整演示模式。")
 
-        report = build_mock_report(saved_path.name)
+        report = build_report_shell(saved_path.name)
 
         logger.info("视频分析")
         video_info = inspect_video(saved_path)
         visual_metrics = None
         if client_visual_metrics:
-            try:
-                visual_metrics = json.loads(client_visual_metrics)
+            visual_metrics = parse_json_field(client_visual_metrics)
+            if visual_metrics:
                 visual_metrics["mock_mode"] = False
                 visual_metrics["fallback_mode"] = visual_metrics.get("fallback_mode", "browser_mediapipe")
                 visual_metrics["analysis_note"] = visual_metrics.get(
                     "analysis_note",
                     "浏览器端 MediaPipe Tasks Vision 已完成上传视频关键点分析。",
                 )
-            except json.JSONDecodeError:
+            else:
                 logger.warning("前端视觉指标 JSON 解析失败，改用后端视觉分析")
                 visual_metrics = None
 
@@ -116,7 +127,7 @@ async def analyze_video(
 
         logger.info("语音识别")
         transcription = transcribe_audio(audio_result.audio_path)
-        duration = video_info.get("duration") or audio_result.duration or report["video_info"]["duration"]
+        duration = video_info.get("duration") or audio_result.duration or 120
 
         logger.info("文本分析")
         transcript = analyze_text(
@@ -161,10 +172,14 @@ async def analyze_fast(
     audio_path = None
     try:
         validate_audio_upload(audio_file)
-        parsed_video_info = json.loads(video_info) if video_info else {}
-        visual_metrics = json.loads(client_visual_metrics) if client_visual_metrics else {}
+        parsed_video_info = parse_json_field(video_info)
+        visual_metrics = parse_json_field(client_visual_metrics)
+        try:
+            parsed_file_size = int(file_size or 0)
+        except (TypeError, ValueError):
+            parsed_file_size = 0
 
-        report = build_mock_report(filename)
+        report = build_report_shell(filename)
         duration = parsed_video_info.get("duration") or 120
 
         transcription = {"text": "", "mock_mode": True, "source": "fallback", "error": "未检测到文本"}
@@ -211,6 +226,7 @@ async def analyze_fast(
         report = enrich_report(report, transcript, visual_metrics, scores)
         report["analysis_status"]["upload"] = {
             "mode": "fast",
+            "file_size": parsed_file_size,
             "message": "大文件已启用快速分析：未上传完整原视频，已优先上传音频用于语音转写。",
         }
         return report

@@ -242,7 +242,7 @@ def _analyze_with_opencv(video_path: Path, frame_step: int, max_seconds: int, re
 
 def analyze_visual_metrics(video_path: Path, frame_step: int = 10, max_seconds: int = 180) -> dict:
     try:
-        os.environ.setdefault("MPLCONFIGDIR", "/private/tmp/matplotlib")
+        os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
         import cv2
     except Exception as exc:
         return build_mock_visual_metrics(f"OpenCV 不可用：{exc}")

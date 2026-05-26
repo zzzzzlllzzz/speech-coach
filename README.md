@@ -123,67 +123,16 @@ http://你的服务器公网IP/
 
 ### 海外部署方式（测试备用）
 
-Vercel + Hugging Face Spaces 可以作为开发测试或海外访问备用方案，但不推荐作为国内最终展示地址。国内用户访问海外服务可能出现打不开、上传慢、接口超时等问题。
+Vercel、Hugging Face Spaces 和 Render 只保留为开发测试或海外访问备用方案，不作为国内最终展示方案。国内用户访问海外服务可能出现打不开、上传慢、接口超时等问题。
 
-如果仍使用海外部署：
+仓库中仍保留这些兼容配置，方便回滚或临时测试：
 
-- 前端：Vercel。
-- 后端：Hugging Face Spaces Docker。
-- 前端通过 `VITE_API_BASE_URL` 连接公网后端。
-- 后端通过 `CORS_ORIGINS` 允许公网前端访问。
+- `Dockerfile`：Hugging Face Spaces 后端测试配置。
+- `vercel.json`：Vercel 前端测试配置。
+- `render.yaml`：Render 旧版备用配置。
+- `frontend/.env.example`、`backend/.env.example`：海外分离部署时的环境变量示例。
 
-本项目已经准备了部署所需的配置：
-
-- `Dockerfile`：Hugging Face Spaces Docker 后端部署文件。
-- `vercel.json`：Vercel 前端部署文件。
-- `render.yaml`：Render Blueprint 备用配置。
-- `frontend/.env.example`：前端公网 API 地址示例。
-- `frontend/public/mediapipe/`：浏览器端 MediaPipe WASM 和 `.task` 模型文件，部署后从你自己的网站加载。
-- `backend/.env.example`：后端 CORS 和模型参数示例。
-- `backend/Dockerfile`：后端容器部署文件，包含 FFmpeg 安装。
-
-部署后，用户访问前端网址，上传视频即可生成训练报告。前端负责浏览器端视觉指标预分析，后端负责保存视频、提取音频和语音转写，避免浏览器无法从 `.mov/.mp4` 中稳定提取音频。
-
-### 推荐部署步骤：Hugging Face Spaces + Vercel
-
-后端：
-
-1. 打开 Hugging Face，创建一个新的 Space。
-2. Space SDK 选择 `Docker`。
-3. 连接或上传这个 GitHub 仓库。
-4. Space 会读取根目录 `Dockerfile`，启动 FastAPI 后端。
-5. 后端健康检查地址通常是：
-
-```text
-https://你的用户名-你的space名.hf.space/health
-```
-
-前端：
-
-1. 打开 Vercel，导入同一个 GitHub 仓库。
-2. 使用根目录的 `vercel.json` 部署前端。
-3. 在 Vercel 项目环境变量中设置：
-
-```bash
-VITE_API_BASE_URL=https://你的用户名-你的space名.hf.space
-```
-
-4. 重新部署 Vercel，最终把 Vercel 网址发给用户即可。
-
-### Render Blueprint 部署步骤（备用）
-
-推荐使用 Blueprint 方式部署：
-
-1. 把整个 `speech-coach-ai` 项目推到一个 GitHub 仓库。
-2. 打开 Render Dashboard。
-3. 点击 `New +`，选择 `Blueprint`。
-4. 选择你的 GitHub 仓库。
-5. Render 会读取仓库根目录的 `render.yaml`，并创建两个服务：
-   - `speech-coach-api`：FastAPI 后端。
-   - `speech-coach`：React 前端。
-6. 部署完成后，打开前端服务的网址即可使用。
-
-如果 Render 提示 `speech-coach` 或 `speech-coach-api` 名称不可用，需要改 `render.yaml` 里的服务名，同时把前端环境变量 `VITE_API_BASE_URL` 改成新的后端地址。
+比赛展示和发给同学、老师体验时，优先使用上面的阿里云一体化 Docker 部署。
 
 ## 项目结构
 
@@ -413,7 +362,7 @@ uvicorn main:app --reload --port 8000
    请先进入项目目录：`cd /Users/zlz/Documents/AI大赛/speech-coach-ai`。
 
 2. 语音识别第一次运行很慢  
-   后端镜像会尝试预下载 Vosk 中文模型。如果 Render 构建时网络不稳定，首次运行可能无法识别。建议比赛演示使用 30 秒到 1 分钟的清晰人声视频。
+   后端镜像会尝试预下载 Vosk 中文模型。如果服务器构建时网络不稳定，首次运行可能无法识别。建议比赛演示使用 30 秒到 1 分钟的清晰人声视频。
 
 3. MediaPipe 没检测到人  
    可能与光线、角度、距离或遮挡有关。系统会自动 fallback/mock。

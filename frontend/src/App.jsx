@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import { analyzeFastVideo, analyzeVideo } from "./api";
-import { extractAudioWavFromVideo } from "./audioExtraction";
-import { analyzeVideoWithMediaPipe } from "./mediapipeVideoAnalysis";
 import { attachIssueFrames, getVideoInfo } from "./videoFrames";
 import UploadPanel from "./components/UploadPanel";
 import ProgressPanel from "./components/ProgressPanel";
@@ -93,16 +91,20 @@ export default function App() {
       let clientVisualMetrics = null;
       try {
         setAnalysisStep("正在分析人脸、姿态和手势关键点");
+        const { analyzeVideoWithMediaPipe } = await import("./mediapipeVideoAnalysis");
         clientVisualMetrics = await analyzeVideoWithMediaPipe(selectedFile, (value) => {
           setProgress((current) => Math.max(current, Math.min(68, 8 + Math.round(value * 0.55))));
         }, { fastMode });
       } catch (mediaPipeError) {
-        console.warn("浏览器端 MediaPipe 分析失败，改用后端视觉分析。", mediaPipeError);
+        if (import.meta.env.DEV) {
+          console.warn("浏览器端 MediaPipe 分析失败，改用后端视觉分析。", mediaPipeError);
+        }
       }
 
       let result;
       if (fastMode) {
         setAnalysisStep("视频较大，正在提取音频并启用快速上传");
+        const { extractAudioWavFromVideo } = await import("./audioExtraction");
         const audioFile = await extractAudioWavFromVideo(selectedFile);
         setProgress((current) => Math.max(current, 72));
         if (audioFile) {

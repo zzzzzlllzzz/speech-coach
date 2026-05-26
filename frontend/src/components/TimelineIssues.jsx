@@ -1,4 +1,8 @@
 export default function TimelineIssues({ issues }) {
+  if (!issues.length) {
+    return <p className="empty-state">暂未检测到明显问题时间点。</p>;
+  }
+
   return (
     <div className="timeline-list">
       {issues.map((issue) => (

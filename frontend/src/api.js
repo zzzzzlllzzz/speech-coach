@@ -75,31 +75,3 @@ export async function analyzeFastVideo({ file, clientVisualMetrics, videoInfo, a
     onUploadProgress,
   });
 }
-
-export async function analyzeFastVideoJson({ file, clientVisualMetrics, videoInfo }) {
-  const response = await fetch(`${API_BASE_URL}/api/analyze-fast-json`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      filename: file.name,
-      file_size: file.size,
-      client_visual_metrics: clientVisualMetrics,
-      video_info: videoInfo,
-    }),
-  });
-
-  if (!response.ok) {
-    let message = "快速分析失败，请稍后重试。";
-    try {
-      const errorData = await response.json();
-      message = errorData.detail || message;
-    } catch {
-      // Keep the default message when the backend does not return JSON.
-    }
-    throw new Error(message);
-  }
-
-  return response.json();
-}

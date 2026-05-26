@@ -8,12 +8,14 @@ const SCORE_LABELS = {
 };
 
 export default function ScoreCard({ name, value }) {
+  const score = Number.isFinite(value) ? value : 0;
+
   return (
     <article className="score-card">
       <span>{SCORE_LABELS[name] || name}</span>
-      <strong>{value}</strong>
+      <strong>{score}</strong>
       <div className="score-bar" aria-hidden="true">
-        <div style={{ width: `${value}%` }} />
+        <div style={{ width: `${score}%` }} />
       </div>
     </article>
   );

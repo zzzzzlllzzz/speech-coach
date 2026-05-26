@@ -67,7 +67,9 @@ export async function extractAudioWavFromVideo(file) {
       type: "audio/wav",
     });
   } catch (error) {
-    console.warn("浏览器音频提取失败，将只做视觉分析。", error);
+    if (import.meta.env.DEV) {
+      console.warn("浏览器音频提取失败，将只做视觉分析。", error);
+    }
     return null;
   } finally {
     if (typeof audioContext.close === "function") {

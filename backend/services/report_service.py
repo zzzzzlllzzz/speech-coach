@@ -50,63 +50,21 @@ def _issue_time(transcript: dict, ratio: float, fallback: str) -> str:
     return _format_issue_time(min(duration * ratio, latest))
 
 
-def build_mock_report(filename: str) -> dict:
+def build_report_shell(filename: str, duration: float | int = 120) -> dict:
     return {
         "video_info": {
             "filename": filename,
-            "duration": 120,
+            "duration": duration,
             "fps": 30,
             "width": 1280,
             "height": 720,
         },
-        "transcript": {
-            "text": "大家好，今天我演讲的主题是人工智能如何帮助我们提升公众表达能力。首先，AI 可以帮助我们发现表达中的问题。其次，它可以给出具体的改进建议。最后，通过不断训练，我们可以变得更加自信和清晰。",
-            "word_count": 92,
-            "duration": 120,
-            "speech_rate": 46,
-            "filler_words": {
-                "嗯": 3,
-                "啊": 2,
-                "然后": 5,
-                "就是": 4,
-            },
-        },
-        "visual_metrics": {
-            "face_visible_ratio": 0.92,
-            "looking_camera_ratio": 0.68,
-            "head_down_count": 6,
-            "body_sway_score": 72,
-            "gesture_activity": 0.35,
-            "hand_visible_ratio": 0.48,
-            "face_block_count": 2,
-            "expression_change_score": 65,
-        },
-        "scores": {
-            "content": 78,
-            "voice": 82,
-            "gesture": 74,
-            "posture": 76,
-            "camera_contact": 68,
-            "overall": 76,
-        },
-        "issues": [
-            {
-                "time": "00:36",
-                "type": "口头禅",
-                "message": "这一段出现较多“然后”，建议替换为更清晰的连接词。",
-            },
-            {
-                "time": "01:12",
-                "type": "身体晃动",
-                "message": "检测到身体左右移动较明显，建议保持重心稳定。",
-            },
-        ],
-        "suggestions": [
-            "语速整体较合适，但重点句后可以增加停顿。",
-            "演讲中低头次数偏多，建议减少看稿时间。",
-            "手势活跃度略低，可以在列举观点时加入自然开放式手势。",
-        ],
-        "summary": "本次演讲主题较明确，语速较稳定，但镜头交流和手势表现仍有提升空间。",
+        "transcript": {},
+        "visual_metrics": {},
+        "scores": {},
+        "issues": [],
+        "suggestions": [],
+        "summary": "",
     }
 
 
@@ -304,10 +262,9 @@ def enrich_report(report: dict, transcript: dict, visual_metrics: dict, scores: 
 
 
 def build_fallback_report(filename: str, reason: str | None = None, duration: float | int = 120) -> dict:
-    report = build_mock_report(filename)
+    report = build_report_shell(filename, duration)
     transcript = analyze_text(MOCK_TRANSCRIPT_TEXT, duration, mock_mode=True)
     transcript["mock_reason"] = reason or "演示模式已启用，使用 mock 文本报告。"
     visual_metrics = build_mock_visual_metrics(reason or "演示模式已启用，使用 mock 视觉指标。")
     scores = calculate_scores(transcript, visual_metrics)
-    report["video_info"]["duration"] = duration
     return enrich_report(report, transcript, visual_metrics, scores)
