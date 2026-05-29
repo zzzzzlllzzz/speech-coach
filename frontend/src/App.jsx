@@ -9,6 +9,8 @@ const MAX_FILE_SIZE = 200 * 1024 * 1024;
 const FAST_MODE_SIZE = 45 * 1024 * 1024;
 const FAST_MODE_DURATION = 90;
 const ALLOWED_EXTENSIONS = [".mp4", ".mov", ".avi", ".mkv"];
+const HISTORY_STORAGE_KEY = "speech-coach-ai-history";
+const MAX_HISTORY_ITEMS = 8;
 
 function validateVideoFile(file) {
   const lowerName = file.name.toLowerCase();
@@ -25,10 +27,54 @@ function validateVideoFile(file) {
   return "";
 }
 
+function createStoredReport(report) {
+  return {
+    ...report,
+    issues: (report.issues || []).map(({ frame_image, ...issue }) => issue),
+  };
+}
+
+function createHistoryItem(file, report) {
+  const videoInfo = report.video_info || {};
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: new Date().toISOString(),
+    filename: videoInfo.filename || file.name,
+    duration: videoInfo.duration || report.transcript?.duration || 0,
+    overall: report.scores?.overall ?? null,
+    summary: report.summary || "",
+    report: createStoredReport(report),
+  };
+}
+
+function readHistory() {
+  try {
+    const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeHistory(items) {
+  try {
+    window.localStorage.setItem(
+      HISTORY_STORAGE_KEY,
+      JSON.stringify(items.slice(0, MAX_HISTORY_ITEMS))
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export default function App() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [report, setReport] = useState(null);
+  const [history, setHistory] = useState(() => readHistory());
   const [stage, setStage] = useState("upload");
   const [progress, setProgress] = useState(0);
   const [analysisStep, setAnalysisStep] = useState("准备分析");
@@ -137,6 +183,13 @@ export default function App() {
         () => result.issues || []
       );
       result = { ...result, issues: framedIssues };
+      const nextHistory = [createHistoryItem(selectedFile, result), ...history].slice(
+        0,
+        MAX_HISTORY_ITEMS
+      );
+      if (writeHistory(nextHistory)) {
+        setHistory(nextHistory);
+      }
       setAnalysisStep("报告已生成");
       setProgress(100);
       window.setTimeout(() => {
@@ -148,6 +201,22 @@ export default function App() {
       setStage("upload");
       setProgress(0);
     }
+  };
+
+  const handleOpenHistory = (item) => {
+    setSelectedFile(null);
+    setPreviewUrl("");
+    setReport(item.report);
+    setStage("report");
+    setProgress(0);
+    setAnalysisStep("已打开历史报告");
+    setError("");
+  };
+
+  const handleClearHistory = () => {
+    if (!history.length) return;
+    window.localStorage.removeItem(HISTORY_STORAGE_KEY);
+    setHistory([]);
   };
 
   const handleReset = () => {
@@ -166,8 +235,11 @@ export default function App() {
           error={error}
           file={selectedFile}
           onAnalyze={handleAnalyze}
+          onClearHistory={handleClearHistory}
           onFileSelect={handleFileSelect}
+          onOpenHistory={handleOpenHistory}
           previewUrl={previewUrl}
+          history={history}
         />
       )}
 

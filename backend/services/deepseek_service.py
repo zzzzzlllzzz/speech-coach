@@ -15,13 +15,18 @@ def extract_json_object(content: str) -> dict:
     return json.loads(match.group(0))
 
 
-def call_deepseek_json(prompt: str, max_tokens: int = 1200) -> dict:
+def call_deepseek_json(
+    prompt: str,
+    max_tokens: int = 1200,
+    model: str | None = None,
+    temperature: float = 0.1,
+) -> dict:
     api_key = os.getenv("DEEPSEEK_API_KEY")
     if not api_key:
         raise ValueError("未配置 DEEPSEEK_API_KEY")
 
     base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-    model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    model = model or os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
     timeout = int(os.getenv("DEEPSEEK_TIMEOUT", "20"))
     body = json.dumps(
         {
@@ -30,7 +35,7 @@ def call_deepseek_json(prompt: str, max_tokens: int = 1200) -> dict:
                 {"role": "system", "content": "你只输出合法 JSON，不输出解释。"},
                 {"role": "user", "content": prompt},
             ],
-            "temperature": 0.1,
+            "temperature": temperature,
             "max_tokens": max_tokens,
         }
     ).encode("utf-8")

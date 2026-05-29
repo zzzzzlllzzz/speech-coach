@@ -5,12 +5,14 @@ import os
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from services.aliyun_asr_service import get_aliyun_asr_status
 from services.audio_service import extract_audio
 from services.gesture_service import analyze_visual_metrics, build_mock_visual_metrics
 from services.report_service import build_fallback_report, build_report_shell, enrich_report
 from services.scoring_service import calculate_scores
+from services.script_optimization_service import optimize_script
 from services.speech_service import transcribe_audio
 from services.text_analysis_service import analyze_text
 from services.video_service import inspect_video
@@ -25,6 +27,13 @@ ALLOWED_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv"}
 ALLOWED_AUDIO_EXTENSIONS = {".wav"}
 MAX_UPLOAD_SIZE = 200 * 1024 * 1024
 MAX_FAST_AUDIO_SIZE = 80 * 1024 * 1024
+
+
+class ScriptOptimizationRequest(BaseModel):
+    text: str
+    summary: str | None = ""
+    suggestions: list[str] = []
+    structure_analysis: dict | None = None
 
 
 def get_cors_origins() -> list[str]:
@@ -80,6 +89,17 @@ def health() -> dict:
 @app.get("/debug/asr")
 def debug_asr(check_token: bool = False) -> dict:
     return get_aliyun_asr_status(check_token=check_token)
+
+
+@app.post("/api/optimize-script")
+def optimize_script_endpoint(payload: ScriptOptimizationRequest) -> dict:
+    try:
+        return optimize_script(payload.dict())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception("DeepSeek 演讲稿优化失败")
+        raise HTTPException(status_code=502, detail=f"演讲稿优化失败：{exc}")
 
 
 @app.post("/api/analyze")

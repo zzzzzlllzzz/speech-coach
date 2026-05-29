@@ -1,6 +1,32 @@
 import VideoPreview from "./VideoPreview";
 
-export default function UploadPanel({ error, file, onAnalyze, onFileSelect, previewUrl }) {
+function formatHistoryTime(value) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatDuration(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  return minutes > 0 ? `${minutes}分${rest}秒` : `${rest}秒`;
+}
+
+export default function UploadPanel({
+  error,
+  file,
+  history = [],
+  onAnalyze,
+  onClearHistory,
+  onFileSelect,
+  onOpenHistory,
+  previewUrl,
+}) {
   const handleChange = (event) => {
     const nextFile = event.target.files?.[0];
     if (nextFile) {
@@ -48,6 +74,43 @@ export default function UploadPanel({ error, file, onAnalyze, onFileSelect, prev
         <button className="primary-button" onClick={onAnalyze} disabled={!file}>
           开始分析
         </button>
+
+        <section className="history-panel">
+          <div className="history-heading">
+            <div>
+              <span>历史记录</span>
+              <strong>最近分析</strong>
+            </div>
+            {history.length > 0 && (
+              <button type="button" onClick={onClearHistory}>
+                清空
+              </button>
+            )}
+          </div>
+
+          {history.length > 0 ? (
+            <div className="history-list">
+              {history.map((item) => (
+                <button
+                  className="history-item"
+                  key={item.id}
+                  type="button"
+                  onClick={() => onOpenHistory(item)}
+                >
+                  <span>
+                    <strong>{item.filename}</strong>
+                    <small>
+                      {formatHistoryTime(item.createdAt)} · {formatDuration(item.duration)}
+                    </small>
+                  </span>
+                  <em>{item.overall ?? "未评分"}</em>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="history-empty">完成一次分析后，这里会保留最近报告。</p>
+          )}
+        </section>
       </div>
     </section>
   );

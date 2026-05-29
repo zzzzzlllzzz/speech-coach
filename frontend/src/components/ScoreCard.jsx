@@ -7,16 +7,23 @@ const SCORE_LABELS = {
   overall: "综合表现",
 };
 
-export default function ScoreCard({ name, value }) {
+export default function ScoreCard({ name, value, onClick }) {
   const score = Number.isFinite(value) ? value : 0;
+  const label = SCORE_LABELS[name] || name;
 
   return (
-    <article className="score-card">
-      <span>{SCORE_LABELS[name] || name}</span>
+    <button
+      className="score-card score-card-button"
+      type="button"
+      onClick={onClick}
+      aria-label={`查看${label}详细诊断`}
+    >
+      <span>{label}</span>
       <strong>{score}</strong>
       <div className="score-bar" aria-hidden="true">
         <div style={{ width: `${score}%` }} />
       </div>
-    </article>
+      <em>查看详情</em>
+    </button>
   );
 }

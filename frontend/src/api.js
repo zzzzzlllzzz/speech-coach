@@ -2,6 +2,7 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   (import.meta.env.DEV ? "http://localhost:8000" : "");
 const ANALYZE_TIMEOUT_MS = 240000;
+const JSON_TIMEOUT_MS = 60000;
 
 function postFormData(path, formData, { timeoutMessage, defaultError, onUploadProgress = null }) {
   return new Promise((resolve, reject) => {
@@ -74,4 +75,30 @@ export async function analyzeFastVideo({ file, clientVisualMetrics, videoInfo, a
     defaultError: "快速分析失败，请稍后重试。",
     onUploadProgress,
   });
+}
+
+export async function optimizeScript(payload) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), JSON_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/optimize-script`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.detail || "演讲稿优化失败，请稍后重试。");
+    }
+    return data;
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("演讲稿优化等待时间较长，请稍后重试。");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
