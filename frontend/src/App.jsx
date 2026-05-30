@@ -4,7 +4,6 @@ import { attachIssueFrames, getVideoInfo } from "./videoFrames";
 import UploadPanel from "./components/UploadPanel";
 import ProgressPanel from "./components/ProgressPanel";
 import ReportDashboard from "./components/ReportDashboard";
-import { sampleDemoReport } from "./sampleDemoReport";
 
 const MAX_FILE_SIZE = 200 * 1024 * 1024;
 const FAST_MODE_SIZE = 45 * 1024 * 1024;
@@ -70,12 +69,6 @@ function writeHistory(items) {
   } catch {
     return false;
   }
-}
-
-function wait(ms) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
 }
 
 export default function App() {
@@ -255,50 +248,6 @@ export default function App() {
     }
   };
 
-  const handleUseDemo = async () => {
-    if (analysisActive) {
-      setError("当前视频仍在分析中，请等待报告生成后再开始示例体验。");
-      return;
-    }
-
-    setSelectedFile(null);
-    setPreviewUrl("");
-    setReport(null);
-    setError("");
-    setAnalysisActive(true);
-    setStage("analyzing");
-
-    const steps = [
-      [8, "正在加载示例视频"],
-      [24, "正在分析人脸、姿态和手势关键点"],
-      [48, "正在提取音频并识别文字"],
-      [72, "正在进行文本结构分析"],
-      [90, "正在计算六维评分"],
-      [100, "报告已生成"],
-    ];
-
-    for (const [nextProgress, nextStep] of steps) {
-      setAnalysisStep(nextStep);
-      setProgress(nextProgress);
-      await wait(nextProgress === 100 ? 300 : 850);
-    }
-
-    const result = JSON.parse(JSON.stringify(sampleDemoReport));
-    const demoFile = { name: result.video_info.filename };
-    setAnalysisActive(false);
-    window.sessionStorage.removeItem(ANALYSIS_DRAFT_STORAGE_KEY);
-    setHistory((currentHistory) => {
-      const nextHistory = [createHistoryItem(demoFile, result), ...currentHistory].slice(
-        0,
-        MAX_HISTORY_ITEMS
-      );
-      writeHistory(nextHistory);
-      return nextHistory;
-    });
-    setReport(result);
-    setStage("report");
-  };
-
   const handleOpenHistory = (item) => {
     if (!analysisActive) {
       setSelectedFile(null);
@@ -348,7 +297,6 @@ export default function App() {
           onFileSelect={handleFileSelect}
           onOpenHistory={handleOpenHistory}
           onShowProgress={() => setStage("analyzing")}
-          onUseDemo={handleUseDemo}
           previewUrl={previewUrl}
           history={history}
         />
