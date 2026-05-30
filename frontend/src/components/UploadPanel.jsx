@@ -29,6 +29,7 @@ export default function UploadPanel({
   onFileSelect,
   onOpenHistory,
   onShowProgress,
+  onUseDemo,
   previewUrl,
 }) {
   const handleChange = (event) => {
@@ -89,6 +90,15 @@ export default function UploadPanel({
         <button className="primary-button" onClick={onAnalyze} disabled={!file || analysisActive}>
           {analysisActive ? "分析进行中" : "开始分析"}
         </button>
+        <button
+          className="demo-button"
+          type="button"
+          onClick={onUseDemo}
+          disabled={analysisActive}
+        >
+          使用示例视频体验完整流程
+        </button>
+
         <section className="history-panel">
           <div className="history-heading">
             <div>
