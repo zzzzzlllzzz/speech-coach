@@ -1,7 +1,7 @@
 export const sampleDemoReport = {
   video_info: {
-    filename: "示例演讲视频.mp4",
-    duration: 58,
+    filename: "speech-coach-demo.mov",
+    duration: 24,
     fps: 30,
     width: 1280,
     height: 720,
@@ -10,17 +10,17 @@ export const sampleDemoReport = {
   },
   transcript: {
     text:
-      "大家好，今天我想分享的是人工智能如何帮助我们提升公众表达。首先，AI 可以把演讲内容转成文字，让我们看到结构是否清楚。其次，系统可以观察手势、站姿和镜头交流，帮助我们发现平时不容易注意到的小问题。最后，我认为技术不是替代练习，而是让每一次练习都有反馈、有方向。以上就是我的分享，谢谢大家。",
+      "大家好，今天我想分享的是人工智能如何帮助我们提升公众表达。首先，AI 可以把演讲内容转成文字，让我们看到结构是否清楚。其次，系统可以观察手势、站姿和镜头交流。最后，我认为技术不是替代练习，而是让每一次练习都有反馈、有方向。谢谢大家。",
     raw_text:
-      "大家好今天我想分享的是人工智能如何帮助我们提升公众表达首先AI可以把演讲内容转成文字让我们看到结构是否清楚其次系统可以观察手势站姿和镜头交流帮助我们发现平时不容易注意到的小问题最后我认为技术不是替代练习而是让每一次练习都有反馈有方向以上就是我的分享谢谢大家",
+      "大家好今天我想分享的是人工智能如何帮助我们提升公众表达首先AI可以把演讲内容转成文字让我们看到结构是否清楚其次系统可以观察手势站姿和镜头交流最后我认为技术不是替代练习而是让每一次练习都有反馈有方向谢谢大家",
     source: "sample_demo",
     polish_source: "sample_demo",
     polish_error: null,
     mock_mode: false,
     speech_rate_reliable: true,
-    word_count: 132,
-    speech_rate: 137,
-    duration: 58,
+    word_count: 96,
+    speech_rate: 190,
+    duration: 24,
     filler_words: {
       然后: 1,
     },
@@ -47,7 +47,7 @@ export const sampleDemoReport = {
     hand_visible_ratio: 0.72,
     face_block_count: 0,
     expression_change_score: 68,
-    analysis_frame_count: 52,
+    analysis_frame_count: 24,
     sample_interval_seconds: 1,
     head_down_events: ["00:18", "00:41"],
     face_block_events: [],
@@ -68,13 +68,13 @@ export const sampleDemoReport = {
   ],
   issues: [
     {
-      time: "00:18",
+      time: "00:08",
       title: "短暂低头",
       description: "这一处出现短暂低头，可以把提纲放到更接近镜头的位置。",
       severity: "轻微",
     },
     {
-      time: "00:34",
+      time: "00:17",
       title: "重点句停顿略短",
       description: "讲到第二个观点后可以停顿一下，让听众更容易跟上结构。",
       severity: "建议",
@@ -84,7 +84,7 @@ export const sampleDemoReport = {
   analysis_status: {
     upload: {
       mode: "sample",
-      file_size: 18100000,
+      file_size: 13467754,
       message: "已使用内置示例视频完成体验流程。",
     },
     speech: {
@@ -93,7 +93,7 @@ export const sampleDemoReport = {
     },
     visual: {
       mode: "sample_demo",
-      message: "示例视频已完成 52 帧视觉关键点分析。",
+      message: "示例视频已完成 24 帧视觉关键点分析。",
     },
   },
 };

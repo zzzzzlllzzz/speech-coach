@@ -75,6 +75,21 @@ export default function UploadPanel({
 
         {previewUrl && <VideoPreview src={previewUrl} />}
 
+        {!previewUrl && (
+          <section className="sample-video-card">
+            <div className="sample-video-copy">
+              <span>内置示例视频</span>
+              <strong>没有测试视频时，也可以直接体验完整分析流程</strong>
+            </div>
+            <video
+              src="/demo/speech-coach-demo.mov"
+              controls
+              playsInline
+              preload="metadata"
+            />
+          </section>
+        )}
+
         {error && <p className="error-text">{error}</p>}
 
         {analysisActive && (
@@ -96,7 +111,7 @@ export default function UploadPanel({
           onClick={onUseDemo}
           disabled={analysisActive}
         >
-          使用示例视频体验完整流程
+          上传这个示例视频并体验完整流程
         </button>
 
         <section className="history-panel">
