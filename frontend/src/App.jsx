@@ -4,12 +4,14 @@ import { attachIssueFrames, getVideoInfo } from "./videoFrames";
 import UploadPanel from "./components/UploadPanel";
 import ProgressPanel from "./components/ProgressPanel";
 import ReportDashboard from "./components/ReportDashboard";
+import { sampleDemoReport } from "./sampleDemoReport";
 
 const MAX_FILE_SIZE = 200 * 1024 * 1024;
 const FAST_MODE_SIZE = 45 * 1024 * 1024;
 const FAST_MODE_DURATION = 90;
 const ALLOWED_EXTENSIONS = [".mp4", ".mov", ".avi", ".mkv"];
 const HISTORY_STORAGE_KEY = "speech-coach-ai-history";
+const ANALYSIS_DRAFT_STORAGE_KEY = "speech-coach-ai-analysis-draft";
 const MAX_HISTORY_ITEMS = 8;
 
 function validateVideoFile(file) {
@@ -70,17 +72,34 @@ function writeHistory(items) {
   }
 }
 
+function wait(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 export default function App() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [report, setReport] = useState(null);
   const [history, setHistory] = useState(() => readHistory());
   const [stage, setStage] = useState("upload");
+  const [analysisActive, setAnalysisActive] = useState(false);
   const [progress, setProgress] = useState(0);
   const [analysisStep, setAnalysisStep] = useState("准备分析");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() => {
+    const draft = window.sessionStorage.getItem(ANALYSIS_DRAFT_STORAGE_KEY);
+    if (!draft) return "";
+    window.sessionStorage.removeItem(ANALYSIS_DRAFT_STORAGE_KEY);
+    return "上次分析因为刷新或关闭页面被中断，请重新上传视频开始分析。";
+  });
 
   const handleFileSelect = (file) => {
+    if (analysisActive) {
+      setError("当前视频仍在分析中，请等待报告生成后再上传新视频。");
+      return;
+    }
+
     const validationError = validateVideoFile(file);
     if (validationError) {
       setSelectedFile(null);
@@ -104,7 +123,7 @@ export default function App() {
   }, [selectedFile]);
 
   useEffect(() => {
-    if (stage !== "analyzing") return undefined;
+    if (!analysisActive) return undefined;
 
     setProgress(8);
     const timer = window.setInterval(() => {
@@ -117,15 +136,44 @@ export default function App() {
     }, 450);
 
     return () => window.clearInterval(timer);
-  }, [stage]);
+  }, [analysisActive]);
+
+  useEffect(() => {
+    if (!analysisActive) {
+      window.sessionStorage.removeItem(ANALYSIS_DRAFT_STORAGE_KEY);
+      return undefined;
+    }
+
+    window.sessionStorage.setItem(
+      ANALYSIS_DRAFT_STORAGE_KEY,
+      JSON.stringify({
+        filename: selectedFile?.name || "",
+        startedAt: new Date().toISOString(),
+      })
+    );
+
+    const handleBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [analysisActive, selectedFile]);
 
   const handleAnalyze = async () => {
+    if (analysisActive) {
+      setError("当前视频仍在分析中，请等待报告生成后再上传新视频。");
+      return;
+    }
+
     if (!selectedFile) {
       setError("请先选择一个 mp4、mov、avi 或 mkv 视频文件。");
       return;
     }
 
     setError("");
+    setAnalysisActive(true);
     setStage("analyzing");
     setProgress(3);
     setAnalysisStep("正在读取视频信息");
@@ -192,24 +240,76 @@ export default function App() {
       }
       setAnalysisStep("报告已生成");
       setProgress(100);
+      setAnalysisActive(false);
+      window.sessionStorage.removeItem(ANALYSIS_DRAFT_STORAGE_KEY);
       window.setTimeout(() => {
         setReport(result);
         setStage("report");
       }, 250);
     } catch (err) {
+      setAnalysisActive(false);
+      window.sessionStorage.removeItem(ANALYSIS_DRAFT_STORAGE_KEY);
       setError(err.message || "分析失败，请稍后重试。");
       setStage("upload");
       setProgress(0);
     }
   };
 
-  const handleOpenHistory = (item) => {
+  const handleUseDemo = async () => {
+    if (analysisActive) {
+      setError("当前视频仍在分析中，请等待报告生成后再开始示例体验。");
+      return;
+    }
+
     setSelectedFile(null);
     setPreviewUrl("");
+    setReport(null);
+    setError("");
+    setAnalysisActive(true);
+    setStage("analyzing");
+
+    const steps = [
+      [8, "正在加载示例视频"],
+      [24, "正在分析人脸、姿态和手势关键点"],
+      [48, "正在提取音频并识别文字"],
+      [72, "正在进行文本结构分析"],
+      [90, "正在计算六维评分"],
+      [100, "报告已生成"],
+    ];
+
+    for (const [nextProgress, nextStep] of steps) {
+      setAnalysisStep(nextStep);
+      setProgress(nextProgress);
+      await wait(nextProgress === 100 ? 300 : 850);
+    }
+
+    const result = JSON.parse(JSON.stringify(sampleDemoReport));
+    const demoFile = { name: result.video_info.filename };
+    setAnalysisActive(false);
+    window.sessionStorage.removeItem(ANALYSIS_DRAFT_STORAGE_KEY);
+    setHistory((currentHistory) => {
+      const nextHistory = [createHistoryItem(demoFile, result), ...currentHistory].slice(
+        0,
+        MAX_HISTORY_ITEMS
+      );
+      writeHistory(nextHistory);
+      return nextHistory;
+    });
+    setReport(result);
+    setStage("report");
+  };
+
+  const handleOpenHistory = (item) => {
+    if (!analysisActive) {
+      setSelectedFile(null);
+      setPreviewUrl("");
+    }
     setReport(item.report);
     setStage("report");
-    setProgress(0);
-    setAnalysisStep("已打开历史报告");
+    if (!analysisActive) {
+      setProgress(0);
+      setAnalysisStep("已打开历史报告");
+    }
     setError("");
   };
 
@@ -220,6 +320,12 @@ export default function App() {
   };
 
   const handleReset = () => {
+    if (analysisActive) {
+      setStage("upload");
+      setError("当前视频仍在分析中，可以查看历史报告，但暂时不能上传新视频。");
+      return;
+    }
+
     setSelectedFile(null);
     setReport(null);
     setStage("upload");
@@ -234,19 +340,34 @@ export default function App() {
         <UploadPanel
           error={error}
           file={selectedFile}
+          analysisActive={analysisActive}
+          analysisProgress={Math.round(progress)}
+          analysisStep={analysisStep}
           onAnalyze={handleAnalyze}
           onClearHistory={handleClearHistory}
           onFileSelect={handleFileSelect}
           onOpenHistory={handleOpenHistory}
+          onShowProgress={() => setStage("analyzing")}
+          onUseDemo={handleUseDemo}
           previewUrl={previewUrl}
           history={history}
         />
       )}
 
-      {stage === "analyzing" && <ProgressPanel progress={Math.round(progress)} step={analysisStep} />}
+      {stage === "analyzing" && (
+        <ProgressPanel
+          progress={Math.round(progress)}
+          step={analysisStep}
+          onBackToHome={() => setStage("upload")}
+        />
+      )}
 
       {stage === "report" && report && (
-        <ReportDashboard report={report} onReset={handleReset} />
+        <ReportDashboard
+          report={report}
+          onReset={handleReset}
+          analysisActive={analysisActive}
+        />
       )}
     </main>
   );

@@ -18,6 +18,9 @@ function formatDuration(seconds) {
 }
 
 export default function UploadPanel({
+  analysisActive = false,
+  analysisProgress = 0,
+  analysisStep = "",
   error,
   file,
   history = [],
@@ -25,6 +28,8 @@ export default function UploadPanel({
   onClearHistory,
   onFileSelect,
   onOpenHistory,
+  onShowProgress,
+  onUseDemo,
   previewUrl,
 }) {
   const handleChange = (event) => {
@@ -37,8 +42,8 @@ export default function UploadPanel({
   return (
     <section className="hero-layout">
       <div className="hero-copy">
-        <p className="eyebrow">AI Speech Coach</p>
-        <h1>言镜 AI</h1>
+        <p className="eyebrow">AI Expression Trainer</p>
+        <h1>Speech Coach</h1>
         <p className="subtitle">多模态公众表达训练助手</p>
         <p className="tagline">不只听你说了什么，也看你怎么说</p>
         <p className="intro">
@@ -60,6 +65,7 @@ export default function UploadPanel({
           <input
             type="file"
             accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,.mp4,.mov,.avi,.mkv"
+            disabled={analysisActive}
             onChange={handleChange}
           />
           <span className="upload-icon">+</span>
@@ -71,8 +77,26 @@ export default function UploadPanel({
 
         {error && <p className="error-text">{error}</p>}
 
-        <button className="primary-button" onClick={onAnalyze} disabled={!file}>
-          开始分析
+        {analysisActive && (
+          <div className="background-analysis-card">
+            <span>当前视频正在后台分析</span>
+            <strong>{analysisStep || "正在生成报告"} · {analysisProgress}%</strong>
+            <button type="button" onClick={onShowProgress}>
+              查看进度
+            </button>
+          </div>
+        )}
+
+        <button className="primary-button" onClick={onAnalyze} disabled={!file || analysisActive}>
+          {analysisActive ? "分析进行中" : "开始分析"}
+        </button>
+        <button
+          className="demo-button"
+          type="button"
+          onClick={onUseDemo}
+          disabled={analysisActive}
+        >
+          使用示例视频体验完整流程
         </button>
 
         <section className="history-panel">

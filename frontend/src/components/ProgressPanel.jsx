@@ -35,7 +35,7 @@ function getStatusText(progress) {
   return "报告即将完成";
 }
 
-export default function ProgressPanel({ progress, step }) {
+export default function ProgressPanel({ progress, step, onBackToHome }) {
   const [tipIndex, setTipIndex] = useState(0);
 
   useEffect(() => {
@@ -62,6 +62,9 @@ export default function ProgressPanel({ progress, step }) {
         <span>等待时可以想一想</span>
         <strong>{speechTips[tipIndex]}</strong>
       </aside>
+      <button className="secondary-button" type="button" onClick={onBackToHome}>
+        回到首页查看历史
+      </button>
       <div className="progress-track" aria-label="分析进度">
         <div className="progress-bar" style={{ width: `${progress}%` }} />
       </div>

@@ -16,6 +16,39 @@ const scoreLabels = {
   overall: "综合表现",
 };
 
+const dimensionVideoExamples = {
+  content: {
+    title: "乔布斯 2005 斯坦福大学毕业演讲",
+    url: "https://www.bilibili.com/video/BV1wv411j7Ux/",
+    intro: "适合学习用三个故事组织内容、用清晰主线承接个人经历与核心观点。",
+  },
+  voice: {
+    title: "马丁·路德·金《我有一个梦想》",
+    url: "https://www.bilibili.com/video/BV1pE411g7Q8/",
+    intro: "适合观察重音、停顿、排比句节奏和情绪递进如何增强表达感染力。",
+  },
+  gesture: {
+    title: "TED 演讲：肢体语言塑造你自己",
+    url: "https://www.bilibili.com/video/BV1ZJ411W7tJ/",
+    intro: "适合学习手势、身体开放度和舞台动作如何服务观点表达。",
+  },
+  posture: {
+    title: "TED 演讲：你的肢体语言可能决定你是谁",
+    url: "https://www.bilibili.com/video/BV1VW411x7vf/",
+    intro: "适合对照站姿、肩颈放松、身体稳定性与表达状态之间的关系。",
+  },
+  camera_contact: {
+    title: "六个超实用的眼神交流技巧",
+    url: "https://www.bilibili.com/video/BV1QQ4y1B7UY/",
+    intro: "适合练习看镜头、环视和停留时长，减少低头读稿带来的距离感。",
+  },
+  overall: {
+    title: "TED 演讲的奥秘：伟大演讲的核心法则",
+    url: "https://www.bilibili.com/video/BV1HC4y1b7bq/",
+    intro: "适合综合学习观点选择、结构设计、语言表达和现场呈现的整体配合。",
+  },
+};
+
 const metricLabels = {
   speech_rate: "语速",
   filler_total: "口头禅总数",
@@ -51,6 +84,7 @@ function getSpeechSourceLabel(transcript) {
   if (transcript.source === "aliyun_nls") return `阿里云 ASR 真实识别${polished}`;
   if (transcript.source === "vosk_zh") return "Vosk 中文离线识别";
   if (transcript.source === "vosk_en") return "Vosk 英文离线识别";
+  if (transcript.source === "sample_demo") return "示例视频语音转写";
   return "真实语音识别";
 }
 
@@ -237,6 +271,7 @@ function buildDimensionDetail(key, context) {
   const detail = detailMap[key] || detailMap.overall;
   return {
     ...detail,
+    videoExample: dimensionVideoExamples[key] || dimensionVideoExamples.overall,
     score,
     problems:
       detail.problems.length > 0
@@ -249,7 +284,7 @@ function buildDimensionDetail(key, context) {
   };
 }
 
-export default function ReportDashboard({ report, onReset }) {
+export default function ReportDashboard({ report, onReset, analysisActive = false }) {
   const [scriptOptimization, setScriptOptimization] = useState(null);
   const [isOptimizingScript, setIsOptimizingScript] = useState(false);
   const [scriptOptimizationError, setScriptOptimizationError] = useState("");
@@ -281,6 +316,8 @@ export default function ReportDashboard({ report, onReset }) {
   const visualSourceLabel =
     visualMode === "browser_mediapipe"
       ? "浏览器 MediaPipe 真实分析"
+      : visualMode === "sample_demo"
+      ? "示例视频视觉分析"
       : visualMode === "opencv"
       ? "OpenCV 真实近似分析"
       : visualMetrics.mock_mode
@@ -323,15 +360,15 @@ export default function ReportDashboard({ report, onReset }) {
       <header className="report-header">
         <div>
           <p className="eyebrow">训练报告</p>
-          <h1>言镜 AI 分析结果</h1>
+          <h1>Speech Coach 分析结果</h1>
           <p>{report.summary}</p>
         </div>
         <div className="report-actions">
           <button className="secondary-button" onClick={() => window.print()}>
             导出演示报告
           </button>
-          <button className="secondary-button" onClick={onReset}>
-            重新上传并分析
+          <button className="secondary-button" onClick={onReset} disabled={analysisActive}>
+            {analysisActive ? "分析进行中" : "重新上传并分析"}
           </button>
         </div>
       </header>
@@ -585,6 +622,22 @@ export default function ReportDashboard({ report, onReset }) {
                   ))}
                 </ol>
               </section>
+              {selectedScoreDetail.videoExample && (
+                <section className="score-detail-wide reference-video-card">
+                  <div>
+                    <h3>优秀案例参考</h3>
+                    <strong>{selectedScoreDetail.videoExample.title}</strong>
+                    <p>{selectedScoreDetail.videoExample.intro}</p>
+                  </div>
+                  <a
+                    href={selectedScoreDetail.videoExample.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    打开视频
+                  </a>
+                </section>
+              )}
             </div>
           </article>
         </div>
