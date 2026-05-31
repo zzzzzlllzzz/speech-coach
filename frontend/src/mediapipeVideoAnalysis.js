@@ -23,34 +23,58 @@ function formatTime(seconds) {
   return `${String(Math.floor(safe / 60)).padStart(2, "0")}:${String(safe % 60).padStart(2, "0")}`;
 }
 
-function waitForEvent(target, event) {
+function createAbortError() {
+  return new DOMException("分析已取消。", "AbortError");
+}
+
+function throwIfAborted(signal) {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+}
+
+function waitForEvent(target, event, signal = null) {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(createAbortError());
+      return;
+    }
+
     const onError = () => reject(new Error("视频读取失败。"));
-    const onEvent = () => {
+    const onAbort = () => {
+      cleanup();
+      reject(createAbortError());
+    };
+    const cleanup = () => {
       target.removeEventListener(event, onEvent);
       target.removeEventListener("error", onError);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const onEvent = () => {
+      cleanup();
       resolve();
     };
     target.addEventListener(event, onEvent, { once: true });
     target.addEventListener("error", onError, { once: true });
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
 
-async function createVideo(file) {
+async function createVideo(file, signal = null) {
   const url = URL.createObjectURL(file);
   const video = document.createElement("video");
   video.src = url;
   video.muted = true;
   video.playsInline = true;
   video.preload = "metadata";
-  await waitForEvent(video, "loadedmetadata");
+  await waitForEvent(video, "loadedmetadata", signal);
   return { video, url };
 }
 
-async function seekVideo(video, time) {
+async function seekVideo(video, time, signal = null) {
   if (Math.abs(video.currentTime - time) < 0.03) return;
   video.currentTime = time;
-  await waitForEvent(video, "seeked");
+  await waitForEvent(video, "seeked", signal);
 }
 
 function faceBox(faceLandmarks) {
@@ -86,7 +110,10 @@ function expressionFeature(faceLandmarks, box) {
 }
 
 export async function analyzeVideoWithMediaPipe(file, onProgress = () => {}, options = {}) {
+  const signal = options.signal || null;
+  throwIfAborted(signal);
   const vision = await FilesetResolver.forVisionTasks(WASM_URL);
+  throwIfAborted(signal);
   const [poseLandmarker, handLandmarker, faceLandmarker] = await Promise.all([
     PoseLandmarker.createFromOptions(vision, {
       baseOptions: { modelAssetPath: POSE_MODEL_URL, delegate: "CPU" },
@@ -105,7 +132,8 @@ export async function analyzeVideoWithMediaPipe(file, onProgress = () => {}, opt
     }),
   ]);
 
-  const { video, url } = await createVideo(file);
+  throwIfAborted(signal);
+  const { video, url } = await createVideo(file, signal);
   const duration = Math.min(video.duration || 0, 180);
   const frameInterval = options.fastMode || duration > 90 ? 1 : 0.5;
   const frameCount = Math.max(1, Math.ceil(duration / frameInterval));
@@ -126,8 +154,10 @@ export async function analyzeVideoWithMediaPipe(file, onProgress = () => {}, opt
 
   try {
     for (let index = 0; index < frameCount; index += 1) {
+      throwIfAborted(signal);
       const time = Math.min(index * frameInterval, Math.max(duration - 0.05, 0));
-      await seekVideo(video, time);
+      await seekVideo(video, time, signal);
+      throwIfAborted(signal);
       const timestampMs = Math.round(time * 1000);
       const poseResult = poseLandmarker.detectForVideo(video, timestampMs);
       const handResult = handLandmarker.detectForVideo(video, timestampMs);

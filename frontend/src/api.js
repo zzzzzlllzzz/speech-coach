@@ -4,16 +4,41 @@ const API_BASE_URL =
 const ANALYZE_TIMEOUT_MS = 240000;
 const JSON_TIMEOUT_MS = 60000;
 
-function postFormData(path, formData, { timeoutMessage, defaultError, onUploadProgress = null }) {
+function createAbortError() {
+  return new DOMException("分析已取消。", "AbortError");
+}
+
+function postFormData(path, formData, { timeoutMessage, defaultError, onUploadProgress = null, signal = null }) {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
+    let settled = false;
+
+    if (signal?.aborted) {
+      reject(createAbortError());
+      return;
+    }
+
+    const finish = (callback) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", handleAbort);
+      callback();
+    };
+
+    const handleAbort = () => {
+      request.abort();
+      finish(() => reject(createAbortError()));
+    };
+
     const timeoutId = window.setTimeout(() => {
       request.abort();
-      reject(new Error(timeoutMessage));
+      finish(() => reject(new Error(timeoutMessage)));
     }, ANALYZE_TIMEOUT_MS);
 
     request.open("POST", `${API_BASE_URL}${path}`);
     request.responseType = "json";
+    signal?.addEventListener("abort", handleAbort, { once: true });
 
     request.upload.onprogress = (event) => {
       if (event.lengthComputable && onUploadProgress) {
@@ -22,29 +47,30 @@ function postFormData(path, formData, { timeoutMessage, defaultError, onUploadPr
     };
 
     request.onload = () => {
-      window.clearTimeout(timeoutId);
-      if (request.status >= 200 && request.status < 300) {
-        resolve(request.response);
-        return;
-      }
-      const message = request.response?.detail || defaultError;
-      reject(new Error(message));
+      finish(() => {
+        if (request.status >= 200 && request.status < 300) {
+          resolve(request.response);
+          return;
+        }
+        const message = request.response?.detail || defaultError;
+        reject(new Error(message));
+      });
     };
 
     request.onerror = () => {
-      window.clearTimeout(timeoutId);
-      reject(new Error("无法连接后端分析服务，请稍后重试。"));
+      finish(() => reject(new Error("无法连接后端分析服务，请稍后重试。")));
     };
 
     request.onabort = () => {
-      window.clearTimeout(timeoutId);
+      if (signal?.aborted) return;
+      finish(() => reject(createAbortError()));
     };
 
     request.send(formData);
   });
 }
 
-export async function analyzeVideo(file, clientVisualMetrics = null, onUploadProgress = null) {
+export async function analyzeVideo(file, clientVisualMetrics = null, onUploadProgress = null, signal = null) {
   const formData = new FormData();
   formData.append("file", file);
   if (clientVisualMetrics) {
@@ -55,10 +81,11 @@ export async function analyzeVideo(file, clientVisualMetrics = null, onUploadPro
     timeoutMessage: "分析等待时间较长，请换用 1 到 3 分钟、声音清晰的视频，或稍后重新上传。",
     defaultError: "视频分析失败，请确认后端服务已启动。",
     onUploadProgress,
+    signal,
   });
 }
 
-export async function analyzeFastVideo({ file, clientVisualMetrics, videoInfo, audioFile = null, onUploadProgress = null }) {
+export async function analyzeFastVideo({ file, clientVisualMetrics, videoInfo, audioFile = null, onUploadProgress = null, signal = null }) {
   const formData = new FormData();
   formData.append("filename", file.name);
   formData.append("file_size", String(file.size));
@@ -74,6 +101,7 @@ export async function analyzeFastVideo({ file, clientVisualMetrics, videoInfo, a
     timeoutMessage: "音频转写等待时间较长，请换用 1 到 3 分钟、声音清晰的视频，或稍后重新上传。",
     defaultError: "快速分析失败，请稍后重试。",
     onUploadProgress,
+    signal,
   });
 }
 

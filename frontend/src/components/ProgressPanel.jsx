@@ -31,11 +31,11 @@ function getStatusText(progress) {
   if (progress < 25) return "正在做本地预处理，页面没有卡住，请保持当前窗口打开。";
   if (progress < 70) return "正在逐帧分析姿态、手势和镜头交流，大视频会自动降低抽帧密度。";
   if (progress < 88) return "正在上传必要数据。大视频会优先上传音频和视觉指标，减少等待。";
-  if (progress < 97) return "后端正在进行语音识别、文本整理和评分，请再等一下。";
+  if (progress < 96) return "后端正在进行语音识别、文本整理和评分，进度会在结果返回后继续完成。";
   return "报告即将完成";
 }
 
-export default function ProgressPanel({ progress, step, onBackToHome }) {
+export default function ProgressPanel({ progress, step, onBackToHome, onCancel }) {
   const [tipIndex, setTipIndex] = useState(0);
 
   useEffect(() => {
@@ -62,9 +62,14 @@ export default function ProgressPanel({ progress, step, onBackToHome }) {
         <span>等待时可以想一想</span>
         <strong>{speechTips[tipIndex]}</strong>
       </aside>
-      <button className="secondary-button" type="button" onClick={onBackToHome}>
-        回到首页查看历史
-      </button>
+      <div className="progress-actions">
+        <button className="secondary-button" type="button" onClick={onBackToHome}>
+          回到首页查看历史
+        </button>
+        <button className="cancel-button" type="button" onClick={onCancel}>
+          取消分析
+        </button>
+      </div>
       <div className="progress-track" aria-label="分析进度">
         <div className="progress-bar" style={{ width: `${progress}%` }} />
       </div>
