@@ -2,6 +2,9 @@ from services.deepseek_service import call_deepseek_json, deepseek_enabled
 from services.text_analysis_service import polish_transcript_text
 
 
+TRANSCRIPT_POLISH_TIMEOUT = 6
+
+
 def _deepseek_enabled() -> bool:
     return deepseek_enabled()
 
@@ -18,7 +21,7 @@ def _polish_with_deepseek(raw_text: str) -> dict:
         "5. 只返回 JSON：{\"text\":\"校正后的文字\"}。\n\n"
         f"原始 ASR 文本：{raw_text}"
     )
-    payload = call_deepseek_json(prompt, max_tokens=1200)
+    payload = call_deepseek_json(prompt, max_tokens=700, timeout=TRANSCRIPT_POLISH_TIMEOUT)
     text = str(payload.get("text") or "").strip()
     text = polish_transcript_text(text)
     if not text:

@@ -7,8 +7,6 @@ import ReportDashboard from "./components/ReportDashboard";
 import { sampleDemoReport } from "./sampleDemoReport";
 
 const MAX_FILE_SIZE = 200 * 1024 * 1024;
-const FAST_MODE_SIZE = 45 * 1024 * 1024;
-const FAST_MODE_DURATION = 90;
 const ALLOWED_EXTENSIONS = [".mp4", ".mov", ".avi", ".mkv"];
 const HISTORY_STORAGE_KEY = "speech-coach-ai-history";
 const ANALYSIS_DRAFT_STORAGE_KEY = "speech-coach-ai-analysis-draft";
@@ -218,10 +216,7 @@ export default function App() {
       const videoInfo = await getVideoInfo(selectedFile).catch(() => ({}));
       throwIfCancelled();
       const lightMode = isLikelyMobileDevice();
-      const fastMode =
-        lightMode ||
-        selectedFile.size > FAST_MODE_SIZE ||
-        (videoInfo.duration || 0) > FAST_MODE_DURATION;
+      const fastMode = true;
       let clientVisualMetrics = null;
       try {
         setAnalysisStep("正在分析人脸、姿态和手势关键点");

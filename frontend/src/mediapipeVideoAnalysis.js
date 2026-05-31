@@ -135,7 +135,7 @@ export async function analyzeVideoWithMediaPipe(file, onProgress = () => {}, opt
   throwIfAborted(signal);
   const { video, url } = await createVideo(file, signal);
   const duration = Math.min(video.duration || 0, 180);
-  const frameInterval = options.lightMode ? 2 : options.fastMode || duration > 90 ? 1.5 : 0.75;
+  const frameInterval = options.lightMode ? 2.5 : options.fastMode || duration > 90 ? 2 : 1;
   const frameCount = Math.max(1, Math.ceil(duration / frameInterval));
 
   let faceVisible = 0;

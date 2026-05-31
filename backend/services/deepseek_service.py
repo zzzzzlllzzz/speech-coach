@@ -20,6 +20,7 @@ def call_deepseek_json(
     max_tokens: int = 1200,
     model: str | None = None,
     temperature: float = 0.1,
+    timeout: int | None = None,
 ) -> dict:
     api_key = os.getenv("DEEPSEEK_API_KEY")
     if not api_key:
@@ -27,7 +28,7 @@ def call_deepseek_json(
 
     base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     model = model or os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-    timeout = int(os.getenv("DEEPSEEK_TIMEOUT", "20"))
+    timeout = timeout or int(os.getenv("DEEPSEEK_TIMEOUT", "20"))
     body = json.dumps(
         {
             "model": model,

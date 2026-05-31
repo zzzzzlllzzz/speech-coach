@@ -130,7 +130,7 @@ def _collect_text(payload: object) -> list[str]:
 
 def _get_audio_chunk_size() -> int:
     try:
-        chunk_ms = int(os.getenv("ALIYUN_NLS_CHUNK_MS", "100"))
+        chunk_ms = int(os.getenv("ALIYUN_NLS_CHUNK_MS", "200"))
     except ValueError:
         chunk_ms = 100
     safe_chunk_ms = min(max(chunk_ms, 20), 500)
@@ -141,9 +141,9 @@ def _get_audio_chunk_size() -> int:
 
 def _get_send_interval() -> float:
     try:
-        return max(0.0, float(os.getenv("ALIYUN_NLS_SEND_INTERVAL", "0.01")))
+        return max(0.0, float(os.getenv("ALIYUN_NLS_SEND_INTERVAL", "0.005")))
     except ValueError:
-        return 0.01
+        return 0.005
 
 
 def _read_pcm_chunks(audio_path: Path, chunk_size: int | None = None):
