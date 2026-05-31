@@ -128,7 +128,26 @@ def _collect_text(payload: object) -> list[str]:
     return texts
 
 
-def _read_pcm_chunks(audio_path: Path, chunk_size: int = 640):
+def _get_audio_chunk_size() -> int:
+    try:
+        chunk_ms = int(os.getenv("ALIYUN_NLS_CHUNK_MS", "100"))
+    except ValueError:
+        chunk_ms = 100
+    safe_chunk_ms = min(max(chunk_ms, 20), 500)
+    bytes_per_second = 16000 * 2
+    chunk_size = int(bytes_per_second * safe_chunk_ms / 1000)
+    return max(640, chunk_size + (chunk_size % 2))
+
+
+def _get_send_interval() -> float:
+    try:
+        return max(0.0, float(os.getenv("ALIYUN_NLS_SEND_INTERVAL", "0.01")))
+    except ValueError:
+        return 0.01
+
+
+def _read_pcm_chunks(audio_path: Path, chunk_size: int | None = None):
+    chunk_size = chunk_size or _get_audio_chunk_size()
     with wave.open(str(audio_path), "rb") as audio:
         if audio.getnchannels() != 1 or audio.getframerate() != 16000:
             raise ValueError("阿里云实时识别需要 16000 Hz 单声道 wav 音频。")
@@ -226,12 +245,14 @@ def transcribe_with_aliyun(audio_path: Path) -> dict:
                 "error": "阿里云语音识别启动失败",
             }
 
+        send_interval = _get_send_interval()
         for chunk in _read_pcm_chunks(audio_path):
             transcriber.send_audio(chunk)
-            time.sleep(0.02)
+            if send_interval:
+                time.sleep(send_interval)
 
-        transcriber.stop(timeout=10)
-        done.wait(timeout=12)
+        transcriber.stop(timeout=int(os.getenv("ALIYUN_NLS_STOP_TIMEOUT", "6")))
+        done.wait(timeout=int(os.getenv("ALIYUN_NLS_DONE_TIMEOUT", "8")))
     except Exception as exc:
         return {
             "text": "",

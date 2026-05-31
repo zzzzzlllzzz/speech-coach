@@ -82,6 +82,13 @@ function isAbortError(error) {
   return error?.name === "AbortError" || error?.message === "分析已取消。";
 }
 
+function isLikelyMobileDevice() {
+  return (
+    window.matchMedia?.("(pointer: coarse)").matches ||
+    /Android|iPhone|iPad|iPod|Mobile/i.test(window.navigator.userAgent)
+  );
+}
+
 export default function App() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -210,8 +217,11 @@ export default function App() {
     try {
       const videoInfo = await getVideoInfo(selectedFile).catch(() => ({}));
       throwIfCancelled();
+      const lightMode = isLikelyMobileDevice();
       const fastMode =
-        selectedFile.size > FAST_MODE_SIZE || (videoInfo.duration || 0) > FAST_MODE_DURATION;
+        lightMode ||
+        selectedFile.size > FAST_MODE_SIZE ||
+        (videoInfo.duration || 0) > FAST_MODE_DURATION;
       let clientVisualMetrics = null;
       try {
         setAnalysisStep("正在分析人脸、姿态和手势关键点");
@@ -220,7 +230,7 @@ export default function App() {
           if (!analysisCancelledRef.current) {
             setProgress((current) => Math.max(current, Math.min(68, 8 + Math.round(value * 0.55))));
           }
-        }, { fastMode, signal: controller.signal });
+        }, { fastMode, lightMode, signal: controller.signal });
       } catch (mediaPipeError) {
         if (isAbortError(mediaPipeError)) throw mediaPipeError;
         if (import.meta.env.DEV) {
