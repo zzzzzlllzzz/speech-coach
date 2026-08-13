@@ -69,18 +69,25 @@ export const sampleDemoReport = {
   issues: [
     {
       time: "00:18",
-      title: "短暂低头",
-      description: "这一处出现短暂低头，可以把提纲放到更接近镜头的位置。",
-      severity: "轻微",
+      type: "短暂低头",
+      message: "这一处出现短暂低头，可以把提纲放到更接近镜头的位置。",
     },
     {
       time: "00:34",
-      title: "重点句停顿略短",
-      description: "讲到第二个观点后可以停顿一下，让听众更容易跟上结构。",
-      severity: "建议",
+      type: "重点句停顿略短",
+      message: "讲到第二个观点后可以停顿一下，让听众更容易跟上结构。",
     },
   ],
   summary: "本次演讲结构完整、语速稳定，镜头交流和身体姿态表现较好，可以继续打磨重点停顿和手势层次。",
+  quality_assessment: {
+    level: "high",
+    label: "数据质量良好",
+    checks: [
+      { label: "语音转写", passed: true, detail: "识别 132 字，覆盖时长 58 秒。" },
+      { label: "视觉抽帧", passed: true, detail: "全程均匀分析 52 帧。" },
+      { label: "时长覆盖", passed: true, detail: "视觉覆盖约 58 / 58 秒。" },
+    ],
+  },
   analysis_status: {
     upload: {
       mode: "sample",

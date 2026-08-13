@@ -4,6 +4,7 @@ import {
   HandLandmarker,
   PoseLandmarker,
 } from "@mediapipe/tasks-vision";
+import { getVideoSamplingPlan } from "./analysisPlan";
 
 const WASM_URL = "/mediapipe/wasm";
 const POSE_MODEL_URL = "/mediapipe/models/pose_landmarker_lite.task";
@@ -134,9 +135,7 @@ export async function analyzeVideoWithMediaPipe(file, onProgress = () => {}, opt
 
   throwIfAborted(signal);
   const { video, url } = await createVideo(file, signal);
-  const duration = Math.min(video.duration || 0, 180);
-  const frameInterval = options.lightMode ? 2.5 : options.fastMode || duration > 90 ? 2 : 1;
-  const frameCount = Math.max(1, Math.ceil(duration / frameInterval));
+  const { duration, frameInterval, frameCount } = getVideoSamplingPlan(video.duration, options.lightMode);
 
   let faceVisible = 0;
   let lookingCamera = 0;
@@ -246,12 +245,13 @@ export async function analyzeVideoWithMediaPipe(file, onProgress = () => {}, opt
     face_block_count: faceBlockCount,
     expression_change_score: Math.round(clamp((expressionDeltas.reduce((sum, value) => sum + value, 0) / Math.max(expressionDeltas.length, 1)) * 450, 0, 100)),
     analysis_frame_count: frameCount,
-    sample_interval_seconds: frameInterval,
+    sample_interval_seconds: Number(frameInterval.toFixed(2)),
+    analyzed_duration_seconds: Number(duration.toFixed(2)),
     head_down_events: headDownEvents.slice(0, 5),
     face_block_events: faceBlockEvents.slice(0, 5),
     mock_mode: false,
     fallback_mode: "browser_mediapipe",
-    analysis_note: `浏览器端 MediaPipe Tasks Vision 已分析 ${frameCount} 帧上传视频。`,
+    analysis_note: `浏览器端 MediaPipe Tasks Vision 已覆盖 ${formatTime(duration)}，均匀分析 ${frameCount} 帧。`,
     metric_sources: {
       face_visible_ratio: "browser_mediapipe_face_landmarker",
       looking_camera_ratio: "browser_mediapipe_face_center",

@@ -179,11 +179,13 @@ def calculate_scores(transcript: dict, visual_metrics: dict) -> dict:
     if transcript.get("mock_mode") and visual_metrics.get("mock_mode"):
         overall = min(overall, 58)
 
+    speech_reliable = _has_effective_text(transcript)
+    visual_reliable = not visual_metrics.get("mock_mode")
     return {
-        "content": content,
-        "voice": voice,
-        "gesture": gesture,
-        "posture": posture,
-        "camera_contact": camera_contact,
-        "overall": overall,
+        "content": content if speech_reliable else None,
+        "voice": voice if speech_reliable else None,
+        "gesture": gesture if visual_reliable else None,
+        "posture": posture if visual_reliable else None,
+        "camera_contact": camera_contact if visual_reliable else None,
+        "overall": overall if speech_reliable and visual_reliable else None,
     }

@@ -284,7 +284,7 @@ function buildDimensionDetail(key, context) {
   };
 }
 
-export default function ReportDashboard({ report, onReset, analysisActive = false }) {
+export default function ReportDashboard({ report, history = [], onReset, analysisActive = false }) {
   const [scriptOptimization, setScriptOptimization] = useState(null);
   const [isOptimizingScript, setIsOptimizingScript] = useState(false);
   const [scriptOptimizationError, setScriptOptimizationError] = useState("");
@@ -298,6 +298,7 @@ export default function ReportDashboard({ report, onReset, analysisActive = fals
   const fillerTotal = fillerEntries.reduce((total, [, count]) => total + count, 0);
   const hasDemoMode = transcript.mock_mode || visualMetrics.mock_mode;
   const analysisStatus = report.analysis_status || {};
+  const qualityAssessment = report.quality_assessment;
   const keyMetrics = {
     speech_rate: transcript.speech_rate,
     filler_total: fillerTotal,
@@ -333,6 +334,21 @@ export default function ReportDashboard({ report, onReset, analysisActive = fals
         suggestions,
         reportSummary: report.summary,
       })
+    : null;
+  const weakestDimensions = scoreKeys
+    .filter((key) => key !== "overall" && Number.isFinite(scores[key]))
+    .sort((a, b) => scores[a] - scores[b])
+    .slice(0, 2);
+  const currentHistoryIndex = history.findIndex((item) =>
+    item.report === report || (
+      item.filename === report.video_info?.filename &&
+      item.overall === scores.overall &&
+      item.summary === report.summary
+    )
+  );
+  const previousReport = currentHistoryIndex >= 0 ? history[currentHistoryIndex + 1] : history[1];
+  const overallDelta = previousReport && Number.isFinite(previousReport.overall) && Number.isFinite(scores.overall)
+    ? scores.overall - previousReport.overall
     : null;
 
   async function handleOptimizeScript() {
@@ -379,6 +395,19 @@ export default function ReportDashboard({ report, onReset, analysisActive = fals
         </div>
       )}
 
+      {qualityAssessment && (
+        <article className={`quality-card ${qualityAssessment.level || "medium"}`}>
+          <div><span>本次分析可信度</span><strong>{qualityAssessment.label}</strong></div>
+          <div className="quality-checks">
+            {qualityAssessment.checks?.map((item) => (
+              <span className={item.passed ? "passed" : "failed"} key={item.label} title={item.detail}>
+                {item.passed ? "✓" : "!"} {item.label}
+              </span>
+            ))}
+          </div>
+        </article>
+      )}
+
       <div className="source-grid">
         {analysisStatus.upload && (
           <article className="source-card">
@@ -400,9 +429,13 @@ export default function ReportDashboard({ report, onReset, analysisActive = fals
       </div>
 
       <div className="overall-card">
-        <span>综合分</span>
+        <span>本次综合分</span>
         <strong>{scores.overall ?? "未评分"}</strong>
         <p>{report.summary}</p>
+        <div className="overall-meta">
+          <span>{overallDelta === null ? "完成下一次训练后可查看进步幅度" : `较上次 ${overallDelta >= 0 ? "+" : ""}${overallDelta} 分`}</span>
+          <span>重点提升：{weakestDimensions.map((key) => scoreLabels[key]).join("、") || "保持当前节奏"}</span>
+        </div>
       </div>
 
       <div className="score-grid">
@@ -429,6 +462,18 @@ export default function ReportDashboard({ report, onReset, analysisActive = fals
           </div>
         </article>
       </div>
+
+      <article className="panel action-plan-panel">
+        <div className="panel-title-row">
+          <div><span>下一步行动</span><h2>三步训练计划</h2></div>
+          <span className="status-pill">建议 15 分钟内完成</span>
+        </div>
+        <div className="action-plan-grid">
+          <section><b>01</b><div><strong>定位短板</strong><p>先查看{weakestDimensions.map((key) => scoreLabels[key]).join("和") || "综合表现"}的详细诊断，只选两项改进。</p></div></section>
+          <section><b>02</b><div><strong>专项练习</strong><p>{suggestions[0] || "围绕最低分维度完成一次 30 秒专项练习。"}</p></div></section>
+          <section><b>03</b><div><strong>同题复测</strong><p>使用同一主题再录一遍，在“能力成长”中对比变化。</p></div></section>
+        </div>
+      </article>
 
       <article className="panel">
         <div className="panel-title-row">

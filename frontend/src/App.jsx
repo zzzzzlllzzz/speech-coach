@@ -1,16 +1,22 @@
 import { useEffect, useRef, useState } from "react";
-import { analyzeFastVideo, analyzeVideo } from "./api";
+import { analyzeFastVideo, analyzeVideo, getServiceStatus } from "./api";
 import { attachIssueFrames, getVideoInfo } from "./videoFrames";
 import UploadPanel from "./components/UploadPanel";
 import ProgressPanel from "./components/ProgressPanel";
 import ReportDashboard from "./components/ReportDashboard";
 import { sampleDemoReport } from "./sampleDemoReport";
+import AppHeader from "./components/AppHeader";
+import HistoryDashboard from "./components/HistoryDashboard";
+import OnboardingGuide from "./components/OnboardingGuide";
+import TrainingGuide from "./components/TrainingGuide";
+import { MAX_VIDEO_DURATION_SECONDS, shouldStreamFullVideo } from "./analysisPlan";
 
-const MAX_FILE_SIZE = 200 * 1024 * 1024;
+const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".mp4", ".mov", ".avi", ".mkv"];
 const HISTORY_STORAGE_KEY = "speech-coach-ai-history";
 const ANALYSIS_DRAFT_STORAGE_KEY = "speech-coach-ai-analysis-draft";
 const MAX_HISTORY_ITEMS = 8;
+const ONBOARDING_STORAGE_KEY = "speech-coach-ai-onboarding-complete";
 
 function validateVideoFile(file) {
   const lowerName = file.name.toLowerCase();
@@ -21,7 +27,7 @@ function validateVideoFile(file) {
   }
 
   if (file.size > MAX_FILE_SIZE) {
-    return "视频文件不能超过 200MB。为了保证语音转写准确，请压缩到 1 到 3 分钟后再上传。";
+    return "视频文件不能超过 500MB。建议保持声音清晰；超长视频会自动调整抽帧密度。";
   }
 
   return "";
@@ -93,6 +99,10 @@ export default function App() {
   const [report, setReport] = useState(null);
   const [history, setHistory] = useState(() => readHistory());
   const [stage, setStage] = useState("upload");
+  const [activeView, setActiveView] = useState("train");
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => window.localStorage.getItem(ONBOARDING_STORAGE_KEY) !== "1"
+  );
   const [analysisActive, setAnalysisActive] = useState(false);
   const [progress, setProgress] = useState(0);
   const [analysisStep, setAnalysisStep] = useState("准备分析");
@@ -213,10 +223,18 @@ export default function App() {
     setAnalysisStep("正在读取视频信息");
 
     try {
+      const serviceStatus = await getServiceStatus();
+      if (!serviceStatus.speech?.ready) {
+        throw new Error("语音识别服务尚未就绪。请配置阿里云 ASR，或确认 Vosk 模型已成功安装后再分析，避免生成不完整报告。");
+      }
       const videoInfo = await getVideoInfo(selectedFile).catch(() => ({}));
       throwIfCancelled();
+      if ((videoInfo.duration || 0) > MAX_VIDEO_DURATION_SECONDS) {
+        throw new Error("当前支持最长 30 分钟的视频，请先裁剪到核心演讲片段后再分析。");
+      }
       const lightMode = isLikelyMobileDevice();
-      const fastMode = true;
+      const isLongVideo = shouldStreamFullVideo(videoInfo.duration, selectedFile.size);
+      const fastMode = !isLongVideo;
       let clientVisualMetrics = null;
       try {
         setAnalysisStep("正在分析人脸、姿态和手势关键点");
@@ -261,13 +279,16 @@ export default function App() {
         }
       } else {
         setProgress((current) => Math.max(current, 72));
-        setAnalysisStep("正在上传视频到后端提取音频");
+        setAnalysisStep("长视频已完成全程抽帧，正在流式上传并提取完整音频");
         result = await analyzeVideo(selectedFile, clientVisualMetrics, (ratio) => {
           setProgress((current) => Math.max(current, 72 + Math.round(ratio * 12)));
         }, controller.signal);
       }
 
       throwIfCancelled();
+      if (result.quality_assessment?.level === "low") {
+        throw new Error("本次语音和视觉数据均未达到可靠分析标准，请检查视频编码、画面和声音后重新上传。");
+      }
       setProgress((current) => Math.max(current, 96));
       setAnalysisStep("正在匹配问题时间点并截取对应画面");
       const framedIssues = await attachIssueFrames(selectedFile, result.issues || []).catch(
@@ -364,6 +385,7 @@ export default function App() {
       setPreviewUrl("");
     }
     setReport(item.report);
+    setActiveView("train");
     setStage("report");
     if (!analysisActive) {
       setProgress(0);
@@ -393,9 +415,31 @@ export default function App() {
     setError("");
   };
 
+  const handleNavigate = (view) => {
+    setActiveView(view);
+    if (view === "train" && stage === "report" && !report) setStage("upload");
+  };
+
+  const handleCloseOnboarding = () => {
+    window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "1");
+    setShowOnboarding(false);
+  };
+
+  const handleStartTraining = () => {
+    setActiveView("train");
+    if (!analysisActive) setStage("upload");
+  };
+
   return (
     <main className="app-shell">
-      {stage === "upload" && (
+      <AppHeader activeView={activeView} analysisActive={analysisActive} onNavigate={handleNavigate} />
+      {activeView === "history" && (
+        <HistoryDashboard history={history} onOpen={handleOpenHistory} onStart={handleStartTraining} />
+      )}
+      {activeView === "guide" && (
+        <TrainingGuide onStart={handleStartTraining} onShowOnboarding={() => setShowOnboarding(true)} />
+      )}
+      {activeView === "train" && stage === "upload" && (
         <UploadPanel
           error={error}
           file={selectedFile}
@@ -413,7 +457,7 @@ export default function App() {
         />
       )}
 
-      {stage === "analyzing" && (
+      {activeView === "train" && stage === "analyzing" && (
         <ProgressPanel
           progress={Math.round(progress)}
           step={analysisStep}
@@ -422,13 +466,15 @@ export default function App() {
         />
       )}
 
-      {stage === "report" && report && (
+      {activeView === "train" && stage === "report" && report && (
         <ReportDashboard
           report={report}
+          history={history}
           onReset={handleReset}
           analysisActive={analysisActive}
         />
       )}
+      {showOnboarding && <OnboardingGuide onClose={handleCloseOnboarding} />}
     </main>
   );
 }

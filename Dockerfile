@@ -5,7 +5,7 @@ ENV PYTHONUNBUFFERED=1
 ENV MPLCONFIGDIR=/tmp/matplotlib
 ENV VOSK_MODEL_PATH=/app/models/vosk-model-small-cn-0.22
 ENV VOSK_EN_MODEL_PATH=/app/models/vosk-model-small-en-us-0.15
-ENV CORS_ORIGINS=*
+ENV CORS_ORIGINS=
 
 WORKDIR /app
 

@@ -115,7 +115,8 @@ def get_aliyun_asr_status(check_token: bool = False) -> dict:
 
 
 def _collect_text(payload: object) -> list[str]:
-    texts: list[str] = []
+    sentence_texts: list[str] = []
+    completed_texts: list[str] = []
     if isinstance(payload, dict):
         for key, value in payload.items():
             if key in {"result", "text", "sentence"} and isinstance(value, str) and value.strip():
@@ -181,21 +182,22 @@ def transcribe_with_aliyun(audio_path: Path) -> dict:
     errors: list[str] = []
     done = threading.Event()
 
-    def append_text(message):
+    def collect_text(message) -> list[str]:
         try:
             payload = json.loads(message) if isinstance(message, str) else message
-            texts.extend(_collect_text(payload))
+            return _collect_text(payload)
         except Exception:
-            pass
+            return []
 
     def on_result_changed(message, *args):
-        append_text(message)
+        # Intermediate hypotheses can repeat or be revised; do not mix them into the final transcript.
+        return None
 
     def on_sentence_end(message, *args):
-        append_text(message)
+        sentence_texts.extend(collect_text(message))
 
     def on_completed(message, *args):
-        append_text(message)
+        completed_texts.extend(collect_text(message))
         done.set()
 
     def on_error(message, *args):
@@ -261,8 +263,15 @@ def transcribe_with_aliyun(audio_path: Path) -> dict:
             "error": f"阿里云语音识别失败：{exc}",
         }
 
-    unique_texts = [text.strip() for text in dict.fromkeys(texts) if text.strip()]
-    text = "".join(unique_texts).strip()
+    texts = sentence_texts or completed_texts
+    normalized_texts: list[str] = []
+    for value in texts:
+        value = value.strip()
+        # Some SDK events expose the same result under nested aliases. Remove only adjacent
+        # callback duplicates so legitimately repeated sentences remain in the speech.
+        if value and (not normalized_texts or normalized_texts[-1] != value):
+            normalized_texts.append(value)
+    text = "".join(normalized_texts).strip()
     if not text:
         return {
             "text": "",

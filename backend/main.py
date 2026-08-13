@@ -1,13 +1,15 @@
 from pathlib import Path
 import json
 import logging
+import math
 import os
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from services.aliyun_asr_service import get_aliyun_asr_status
+from services.aliyun_asr_service import aliyun_asr_enabled
 from services.audio_service import extract_audio
 from services.gesture_service import analyze_visual_metrics, build_mock_visual_metrics
 from services.report_service import build_fallback_report, build_report_shell, enrich_report
@@ -16,7 +18,7 @@ from services.script_optimization_service import optimize_script
 from services.speech_service import transcribe_audio
 from services.text_analysis_service import analyze_text
 from services.video_service import inspect_video
-from utils.file_utils import save_upload_file
+from utils.file_utils import UploadTooLargeError, save_upload_file
 
 
 app = FastAPI(title="言镜 AI API", version="0.1.0")
@@ -25,14 +27,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 
 ALLOWED_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv"}
 ALLOWED_AUDIO_EXTENSIONS = {".wav"}
-MAX_UPLOAD_SIZE = 200 * 1024 * 1024
+MAX_UPLOAD_SIZE = 500 * 1024 * 1024
 MAX_FAST_AUDIO_SIZE = 80 * 1024 * 1024
+MAX_JSON_FIELD_SIZE = 64 * 1024
+MAX_SCRIPT_TEXT_LENGTH = 20000
 
 
 class ScriptOptimizationRequest(BaseModel):
-    text: str
-    summary: str | None = ""
-    suggestions: list[str] = []
+    text: str = Field(min_length=1, max_length=MAX_SCRIPT_TEXT_LENGTH)
+    summary: str | None = Field(default="", max_length=2000)
+    suggestions: list[str] = Field(default_factory=list, max_length=30)
     structure_analysis: dict | None = None
 
 
@@ -45,6 +49,22 @@ def get_cors_origins() -> list[str]:
 
 def use_mock_mode() -> bool:
     return os.getenv("USE_MOCK", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def speech_service_status() -> dict:
+    chinese_model = Path(os.getenv("VOSK_MODEL_PATH", "models/vosk-model-small-cn-0.22"))
+    english_model = Path(os.getenv("VOSK_EN_MODEL_PATH", "models/vosk-model-small-en-us-0.15"))
+    aliyun_ready = aliyun_asr_enabled()
+    offline_ready = any(
+        (model / "am" / "final.mdl").is_file() and (model / "conf" / "model.conf").is_file()
+        for model in (chinese_model, english_model)
+    )
+    return {
+        "ready": aliyun_ready or offline_ready or use_mock_mode(),
+        "aliyun_ready": aliyun_ready,
+        "offline_ready": offline_ready,
+        "mock_mode": use_mock_mode(),
+    }
 
 
 def validate_upload(file: UploadFile) -> None:
@@ -65,41 +85,121 @@ def validate_audio_upload(file: UploadFile | None) -> None:
 def parse_json_field(value: str | None, default: dict | None = None) -> dict:
     if not value:
         return default or {}
+    if len(value.encode("utf-8")) > MAX_JSON_FIELD_SIZE:
+        raise HTTPException(status_code=400, detail="分析指标数据过大。")
     try:
         parsed = json.loads(value)
         return parsed if isinstance(parsed, dict) else (default or {})
     except json.JSONDecodeError:
-        return default or {}
+        raise HTTPException(status_code=400, detail="分析指标格式无效。")
+
+
+def safe_number(value: object, default: float, minimum: float, maximum: float) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(number):
+        return default
+    return max(minimum, min(maximum, number))
+
+
+def sanitize_video_info(values: dict) -> dict:
+    return {
+        "duration": safe_number(values.get("duration"), 120, 1, 1800),
+        "fps": safe_number(values.get("fps"), 30, 1, 240),
+        "width": round(safe_number(values.get("width"), 1280, 1, 7680)),
+        "height": round(safe_number(values.get("height"), 720, 1, 4320)),
+    }
+
+
+def sanitize_visual_metrics(values: dict) -> dict:
+    ratios = {"face_visible_ratio", "looking_camera_ratio", "gesture_activity", "hand_visible_ratio"}
+    counts = {"head_down_count", "face_block_count", "analysis_frame_count"}
+    scores = {"body_sway_score", "expression_change_score"}
+    cleaned = {}
+    for key in ratios:
+        cleaned[key] = safe_number(values.get(key), 0, 0, 1)
+    for key in counts:
+        cleaned[key] = round(safe_number(values.get(key), 0, 0, 100000))
+    for key in scores:
+        cleaned[key] = safe_number(values.get(key), 0, 0, 100)
+    for key in ("head_down_events", "face_block_events"):
+        items = values.get(key)
+        cleaned[key] = [str(item)[:12] for item in items[:100]] if isinstance(items, list) else []
+    cleaned["sample_interval_seconds"] = safe_number(values.get("sample_interval_seconds"), 1, 0.01, 60)
+    cleaned["analyzed_duration_seconds"] = safe_number(values.get("analyzed_duration_seconds"), 0, 0, 1800)
+    return cleaned
+
+
+def cleanup_file(path: Path | None) -> None:
+    if path:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("临时文件清理失败：%s", path.name)
 
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=(cors_origins := get_cors_origins()),
     allow_credentials="*" not in cors_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Accept", "Content-Type"],
 )
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    if request.url.path == "/api/optimize-script":
+        try:
+            if int(request.headers.get("content-length", "0")) > 128 * 1024:
+                return Response(
+                    content='{"detail":"请求内容过大。"}',
+                    status_code=413,
+                    media_type="application/json",
+                )
+        except ValueError:
+            return Response(
+                content='{"detail":"Content-Length 无效。"}',
+                status_code=400,
+                media_type="application/json",
+            )
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Cache-Control"] = "no-store" if request.url.path.startswith(("/api", "/debug")) else "no-cache"
+    return response
 
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    return {"status": "ok", "speech": speech_service_status()}
+
+
+@app.get("/api/status")
+def api_status() -> dict:
+    return {"speech": speech_service_status(), "max_video_minutes": 30, "max_upload_mb": 500}
 
 
 @app.get("/debug/asr")
 def debug_asr(check_token: bool = False) -> dict:
+    if os.getenv("ENABLE_DEBUG_ENDPOINTS", "false").lower() not in {"1", "true", "yes", "on"}:
+        raise HTTPException(status_code=404, detail="Not found")
     return get_aliyun_asr_status(check_token=check_token)
 
 
 @app.post("/api/optimize-script")
 def optimize_script_endpoint(payload: ScriptOptimizationRequest) -> dict:
     try:
-        return optimize_script(payload.dict())
+        return optimize_script(payload.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         logger.exception("DeepSeek 演讲稿优化失败")
-        raise HTTPException(status_code=502, detail=f"演讲稿优化失败：{exc}")
+        raise HTTPException(status_code=502, detail="演讲稿优化服务暂时不可用，请稍后重试。")
 
 
 @app.post("/api/analyze")
@@ -108,14 +208,13 @@ async def analyze_video(
     client_visual_metrics: str | None = Form(None),
 ) -> dict:
     saved_path = None
+    extracted_audio_path = None
 
     try:
         validate_upload(file)
 
         logger.info("保存视频")
-        saved_path = await save_upload_file(file)
-        if saved_path.stat().st_size > MAX_UPLOAD_SIZE:
-            raise HTTPException(status_code=400, detail="视频文件不能超过 200MB。")
+        saved_path = await save_upload_file(file, max_bytes=MAX_UPLOAD_SIZE)
 
         if use_mock_mode():
             logger.info("USE_MOCK=true，返回演示模式报告")
@@ -125,9 +224,11 @@ async def analyze_video(
 
         logger.info("视频分析")
         video_info = inspect_video(saved_path)
+        if float(video_info.get("duration") or 0) > 30 * 60:
+            raise HTTPException(status_code=400, detail="当前支持最长 30 分钟的视频。")
         visual_metrics = None
         if client_visual_metrics:
-            visual_metrics = parse_json_field(client_visual_metrics)
+            visual_metrics = sanitize_visual_metrics(parse_json_field(client_visual_metrics))
             if visual_metrics:
                 visual_metrics["mock_mode"] = False
                 visual_metrics["fallback_mode"] = visual_metrics.get("fallback_mode", "browser_mediapipe")
@@ -144,6 +245,7 @@ async def analyze_video(
 
         logger.info("提取音频")
         audio_result = extract_audio(saved_path)
+        extracted_audio_path = audio_result.audio_path
 
         logger.info("语音识别")
         transcription = transcribe_audio(audio_result.audio_path)
@@ -173,12 +275,17 @@ async def analyze_video(
         report["video_info"] = video_info
         report["video_info"]["duration"] = duration
         return enrich_report(report, transcript, visual_metrics, scores)
+    except UploadTooLargeError:
+        raise HTTPException(status_code=413, detail="视频文件不能超过 500MB。")
     except HTTPException:
         raise
     except Exception as exc:
         logger.exception("分析失败，返回 fallback 报告")
         filename = saved_path.name if saved_path else (file.filename or "demo.mp4")
-        return build_fallback_report(filename, f"后端分析失败，已自动切换到演示报告：{exc}")
+        return build_fallback_report(filename, "分析服务暂时不可用，已自动切换到演示报告。")
+    finally:
+        cleanup_file(saved_path)
+        cleanup_file(extracted_audio_path)
 
 
 @app.post("/api/analyze-fast")
@@ -192,21 +299,25 @@ async def analyze_fast(
     audio_path = None
     try:
         validate_audio_upload(audio_file)
-        parsed_video_info = parse_json_field(video_info)
+        suffix = Path(filename).suffix.lower()
+        if suffix not in ALLOWED_EXTENSIONS or len(filename) > 255:
+            raise HTTPException(status_code=400, detail="视频文件名或格式无效。")
+        parsed_video_info = sanitize_video_info(parse_json_field(video_info))
         visual_metrics = parse_json_field(client_visual_metrics)
+        if visual_metrics:
+            visual_metrics = sanitize_visual_metrics(visual_metrics)
         try:
             parsed_file_size = int(file_size or 0)
         except (TypeError, ValueError):
             parsed_file_size = 0
+        parsed_file_size = max(0, min(parsed_file_size, MAX_UPLOAD_SIZE))
 
         report = build_report_shell(filename)
         duration = parsed_video_info.get("duration") or 120
 
         transcription = {"text": "", "mock_mode": True, "source": "fallback", "error": "未检测到文本"}
         if audio_file is not None:
-            audio_path = await save_upload_file(audio_file)
-            if audio_path.stat().st_size > MAX_FAST_AUDIO_SIZE:
-                raise HTTPException(status_code=400, detail="提取后的音频不能超过 80MB。")
+            audio_path = await save_upload_file(audio_file, max_bytes=MAX_FAST_AUDIO_SIZE)
             transcription = transcribe_audio(audio_path)
 
         transcript = analyze_text(
@@ -250,9 +361,15 @@ async def analyze_fast(
             "message": "大文件已启用快速分析：未上传完整原视频，已优先上传音频用于语音转写。",
         }
         return report
-    except Exception as exc:
+    except UploadTooLargeError:
+        raise HTTPException(status_code=413, detail="提取后的音频不能超过 80MB。")
+    except HTTPException:
+        raise
+    except Exception:
         logger.exception("快速分析失败，返回 fallback 报告")
         return build_fallback_report(
             filename,
-            f"快速分析失败：{exc}",
+            "快速分析服务暂时不可用，已自动切换到演示报告。",
         )
+    finally:
+        cleanup_file(audio_path)

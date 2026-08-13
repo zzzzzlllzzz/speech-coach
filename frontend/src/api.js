@@ -1,8 +1,19 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   (import.meta.env.DEV ? "http://localhost:8000" : "");
-const ANALYZE_TIMEOUT_MS = 240000;
+const ANALYZE_TIMEOUT_MS = 900000;
 const JSON_TIMEOUT_MS = 60000;
+
+export async function getServiceStatus() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/status`, { cache: "no-store" });
+    if (!response.ok) throw new Error("分析服务状态检查失败。");
+    return response.json();
+  } catch (error) {
+    if (error.message === "分析服务状态检查失败。") throw error;
+    throw new Error("无法连接分析服务，请检查后端是否已启动或稍后重试。");
+  }
+}
 
 function createAbortError() {
   return new DOMException("分析已取消。", "AbortError");

@@ -8,7 +8,8 @@ const SCORE_LABELS = {
 };
 
 export default function ScoreCard({ name, value, onClick }) {
-  const score = Number.isFinite(value) ? value : 0;
+  const available = Number.isFinite(value);
+  const score = available ? value : 0;
   const label = SCORE_LABELS[name] || name;
 
   return (
@@ -16,14 +17,15 @@ export default function ScoreCard({ name, value, onClick }) {
       className="score-card score-card-button"
       type="button"
       onClick={onClick}
-      aria-label={`查看${label}详细诊断`}
+      disabled={!available}
+      aria-label={available ? `查看${label}详细诊断` : `${label}本次未评分`}
     >
       <span>{label}</span>
-      <strong>{score}</strong>
+      <strong>{available ? score : "—"}</strong>
       <div className="score-bar" aria-hidden="true">
         <div style={{ width: `${score}%` }} />
       </div>
-      <em>查看详情</em>
+      <em>{available ? "查看详情" : "数据不足"}</em>
     </button>
   );
 }

@@ -20,11 +20,14 @@ app_port: 7860
 - 稳定演示：阿里云 ASR、Vosk、MediaPipe 或 FFmpeg 出错时自动 fallback/mock。
 - 比赛友好：支持演示模式、进度展示、报告打印导出。
 - 训练导向：建议聚焦可改进动作，例如停顿、看镜头、减少低头、优化手势。
+- 完整训练闭环：首次使用引导、录制准备、分析报告、三步训练计划与历史能力趋势连成一体。
+- 隐私友好：历史报告保存在当前浏览器；服务端分析完成后自动清理新上传的视频和临时音频。
+- 安全边界：流式上传限额、指标白名单与数值限界、默认关闭调试接口，并为 API 添加安全响应头。
 
 ## 功能说明
 
 - 上传演讲视频，支持 `mp4`、`mov`、`avi`、`mkv`。
-- 支持 200MB 以内视频。为了保证语音转写准确，正式展示建议使用 1 到 3 分钟、声音清晰的视频。
+- 支持 500MB、最长 30 分钟的视频；长视频会全程均匀抽帧，并由后端流式接收后提取完整音频，避免浏览器解码超长音频导致内存不足。
 - 提取音频并转写中英文演讲文本。
 - 视频会上传到后端，由 FFmpeg 提取 16k 单声道 wav 音频后再进行语音识别，优先保证转写稳定性。
 - 统计字数、语速、口头禅、逻辑连接词。
@@ -32,6 +35,9 @@ app_port: 7860
 - 生成内容表达、语音表现、手势表现、姿态稳定、镜头交流和综合表现评分。
 - 生成问题时间点、个性化建议和总结。
 - 支持“导出演示报告”，当前使用浏览器打印 `window.print()` 实现。
+- 支持最近 8 次训练记录、综合分趋势、历史最佳与优先训练维度。
+- 支持报告后自动生成三步训练计划，并通过训练指南完成同题复测闭环。
+- 报告会显示语音转写、视觉抽帧和全程覆盖的数据质量检查；识别不完整时会明确标记“需复核”，不会把降级结果伪装成准确结论。
 
 ## 技术栈
 
@@ -40,7 +46,7 @@ app_port: 7860
 - 音频提取：FFmpeg / imageio-ffmpeg
 - 语音识别：阿里云智能语音交互实时识别优先，Vosk 中英文离线模型兜底
 - 视频处理：OpenCV
-- 姿态、手势、人脸分析：浏览器端 MediaPipe Tasks Vision，后端 Python MediaPipe / OpenCV 兜底
+- 姿态、手势、人脸分析：浏览器端 MediaPipe Tasks Vision，后端 OpenCV 真实帧近似分析兜底
 - 图表：Recharts
 
 ## 最终作品上线方式
@@ -87,7 +93,7 @@ cp .env.aliyun.example .env
 
 ```bash
 USE_MOCK=false
-CORS_ORIGINS=*
+CORS_ORIGINS=
 ALIYUN_NLS_APP_KEY=你的阿里云智能语音交互AppKey
 ALIYUN_AK_ID=你的阿里云AccessKey ID
 ALIYUN_AK_SECRET=你的阿里云AccessKey Secret
@@ -203,7 +209,16 @@ http://localhost:8000/health
 期望返回：
 
 ```json
-{"status":"ok"}
+{"status":"ok","speech":{"ready":true,"aliyun_ready":true,"offline_ready":false,"mock_mode":false}}
+```
+
+前端在上传前会读取 `/api/status`。如果阿里云 ASR 与 Vosk 模型都不可用，将直接提示修复配置，不会先上传长视频再生成缺少语音维度的不完整报告。
+
+运行后端安全与接口测试：
+
+```bash
+cd backend
+python -m unittest discover -s tests -v
 ```
 
 ## 前端运行方法
@@ -251,7 +266,10 @@ ALIYUN_NLS_APP_KEY=你的阿里云智能语音交互AppKey
 ALIYUN_AK_ID=你的阿里云AccessKey ID
 ALIYUN_AK_SECRET=你的阿里云AccessKey Secret
 DEEPSEEK_API_KEY=你的DeepSeek API Key
+ENABLE_DEBUG_ENDPOINTS=false
 ```
+
+`/debug/asr` 默认返回 404。只在受控排障期间临时设置 `ENABLE_DEBUG_ENDPOINTS=true`，排障结束后立即恢复为 `false`。
 
 如果比赛现场只需要稳定演示，可以临时设置：
 
@@ -307,15 +325,15 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com
 
 ## MediaPipe 说明
 
-视频分析使用 OpenCV 抽帧，并优先用 MediaPipe 检测人体姿态、手部关键点和人脸关键点。系统每隔 10 帧分析一帧，最长只分析前 3 分钟，避免普通电脑运行太慢。
+浏览器端使用 MediaPipe 检测人体姿态、手部关键点和人脸关键点。系统会根据视频时长动态调整采样间隔，在最长 30 分钟内均匀覆盖全程，并把帧数控制在约 240 帧（移动端约 120 帧），兼顾长视频覆盖率与设备性能。
 
 当前版本会优先在浏览器端使用 MediaPipe Tasks Vision WASM 分析用户上传的视频帧，得到人脸、姿态和手部关键点指标。浏览器端分析成功后，前端会把 `visual_metrics` 随视频一起提交给后端生成报告。
 
 浏览器端 MediaPipe 所需的 WASM 和模型文件已经放在 `frontend/public/mediapipe/`，部署前端时会一起发布，不依赖用户额外安装软件，也不依赖外部 CDN。
 
-如果浏览器端 MediaPipe 失败，后端会继续尝试 Python 版 MediaPipe。如果后端 MediaPipe 也无法正常运行，系统会使用 OpenCV 对真实视频帧做降级分析，估算人脸可见比例、近似镜头交流、低头次数、画面晃动、手势活跃度、手部可见比例、遮脸次数和表情变化程度。只有 OpenCV 也无法读取视频时，才会使用 mock 视觉指标。
+如果浏览器端 MediaPipe 失败，后端会使用 OpenCV 对真实视频帧做近似分析，估算人脸可见比例、近似镜头交流、低头次数、画面晃动、手势活跃度、手部可见比例、遮脸次数和表情变化程度。服务端不再安装 Python MediaPipe，从而避免其 OpenGL/Protobuf 依赖冲突并减小部署镜像。只有 OpenCV 也无法读取视频时，才会使用 mock 视觉指标。
 
-注意：在部分 macOS 沙盒或远程运行环境中，Python 版 MediaPipe 可能因为无法创建 OpenGL/Metal 图形上下文而失败。因此本项目把精确视觉分析优先放在浏览器端执行，更适合“发链接即可使用”的最终作品形态。
+精确视觉分析优先放在浏览器端执行，既避免服务端图形上下文问题，也更适合“发链接即可使用”的最终作品形态。
 
 视觉分析会受到光线、角度、遮挡、人物距离、画面清晰度和多人入镜影响。本系统只做辅助分析，不做绝对评价。
 
@@ -341,7 +359,7 @@ $env:USE_MOCK="true"
 uvicorn main:app --reload --port 8000
 ```
 
-如果 `USE_MOCK=true`，后端不执行 Vosk、MediaPipe 或 OpenCV 分析，直接返回完整演示报告。如果 `USE_MOCK=false` 或未设置，后端会正常尝试真实分析：Vosk 未检测到清晰文本时显示“未检测到文本”，MediaPipe 失败时优先使用 OpenCV 真实近似分析，最后才使用 mock 指标。
+如果 `USE_MOCK=true`，后端不执行 Vosk 或 OpenCV 分析，直接返回完整演示报告。如果 `USE_MOCK=false` 或未设置，系统会执行真实分析：浏览器 MediaPipe 失败时由后端 OpenCV 分析真实帧；语音服务未就绪时会在上传前阻止分析，不再伪造综合分。
 
 ## 评分规则
 

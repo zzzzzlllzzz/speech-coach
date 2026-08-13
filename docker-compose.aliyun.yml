@@ -6,7 +6,7 @@ services:
     environment:
       PORT: 8000
       USE_MOCK: ${USE_MOCK:-false}
-      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
       ALIYUN_NLS_APP_KEY: ${ALIYUN_NLS_APP_KEY:-}
       ALIYUN_AK_ID: ${ALIYUN_AK_ID:-}
       ALIYUN_AK_SECRET: ${ALIYUN_AK_SECRET:-}

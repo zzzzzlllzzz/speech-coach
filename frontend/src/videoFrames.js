@@ -68,6 +68,10 @@ export async function attachIssueFrames(file, issues = []) {
 
     const framedIssues = [];
     for (const issue of issues) {
+      if (!/^\d{1,2}:\d{2}(?::\d{2})?$/.test(String(issue.time || ""))) {
+        framedIssues.push(issue);
+        continue;
+      }
       const rawSeconds = parseTimeToSeconds(issue.time);
       const seconds = duration ? Math.min(Math.max(rawSeconds, 0), Math.max(duration - 0.1, 0)) : rawSeconds;
       try {

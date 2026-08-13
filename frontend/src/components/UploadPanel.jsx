@@ -42,24 +42,33 @@ export default function UploadPanel({
   return (
     <section className="hero-layout">
       <div className="hero-copy">
-        <p className="eyebrow">AI Expression Trainer</p>
-        <h1>Speech Coach</h1>
-        <p className="subtitle">多模态公众表达训练助手</p>
+        <p className="eyebrow">AI Expression Coach</p>
+        <h1>每一次开口<br />都有进步依据</h1>
+        <p className="subtitle">言镜 AI · 多模态公众表达训练助手</p>
         <p className="tagline">不只听你说了什么，也看你怎么说</p>
         <p className="intro">
           上传一段演讲视频，系统将生成语言表达、动作手势和镜头交流的可视化训练报告。
         </p>
         <div className="hero-highlights">
-          <span>语音转写</span>
-          <span>动作分析</span>
-          <span>可解释评分</span>
+          <span>✓ 语音与结构</span>
+          <span>✓ 姿态与手势</span>
+          <span>✓ 镜头交流</span>
+          <span>✓ 可执行训练计划</span>
+        </div>
+        <div className="flow-preview" aria-label="使用流程">
+          <span><b>01</b>上传视频</span><i />
+          <span><b>02</b>AI 分析</span><i />
+          <span><b>03</b>针对训练</span>
         </div>
       </div>
 
       <div className="upload-card">
         <div className="upload-card-header">
-          <span>比赛演示入口</span>
-          <strong>上传演讲视频</strong>
+          <span>新一轮训练</span>
+          <strong>上传你的演讲视频</strong>
+        </div>
+        <div className="recording-checks" aria-label="录制建议">
+          <span>人脸与上半身入镜</span><span>声音清晰</span><span>支持最长 30 分钟</span>
         </div>
         <label className="upload-zone">
           <input
@@ -70,7 +79,7 @@ export default function UploadPanel({
           />
           <span className="upload-icon">+</span>
           <strong>{file ? file.name : "上传视频文件"}</strong>
-          <small>支持格式：mp4、mov、avi、mkv · 200MB 以内 · 建议 1 到 3 分钟</small>
+          <small>支持格式：mp4、mov、avi、mkv · 500MB 以内 · 长视频自动均匀抽帧</small>
         </label>
 
         {previewUrl && <VideoPreview src={previewUrl} />}
@@ -88,7 +97,7 @@ export default function UploadPanel({
         )}
 
         <button className="primary-button" onClick={onAnalyze} disabled={!file || analysisActive}>
-          {analysisActive ? "分析进行中" : "开始分析"}
+          {analysisActive ? "分析进行中" : "开始多模态分析"}
         </button>
         <button
           className="demo-button"

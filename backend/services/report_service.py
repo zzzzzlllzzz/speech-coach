@@ -80,7 +80,7 @@ def build_suggestions(transcript: dict, visual_metrics: dict) -> list[str]:
     body_sway_score = visual_metrics.get("body_sway_score", 100)
 
     if transcript.get("mock_mode"):
-        suggestions.append("语音识别本次未完成，文本相关建议使用演示估算；正式展示前建议准备一段声音清晰的 1 到 3 分钟视频。")
+        suggestions.append("语音识别本次未完成，文本维度不参与可靠判断；请确认声音清晰，并检查阿里云 ASR 或 Vosk 服务是否可用后重新分析。")
     if not transcript.get("mock_mode") and not transcript.get("has_opening"):
         suggestions.append("没有检测到明确开场语，建议先用一句简短问候和主题句帮助观众进入内容。")
     if not transcript.get("mock_mode") and not transcript.get("has_topic"):
@@ -130,7 +130,7 @@ def build_issues(transcript: dict, visual_metrics: dict) -> list[dict]:
     if not transcript.get("mock_mode") and filler_total > 10:
         issues.append(
             {
-                "time": _issue_time(transcript, 0.25, "00:05"),
+                "time": "全文",
                 "type": "口头禅",
                 "message": "这一段可能出现较多口头禅，建议用停顿替代表达填充词。",
             }
@@ -139,7 +139,7 @@ def build_issues(transcript: dict, visual_metrics: dict) -> list[dict]:
     if speech_rate_reliable and transcript.get("speech_rate", 0) > 200:
         issues.append(
             {
-                "time": _issue_time(transcript, 0.2, "00:20"),
+                "time": "全程",
                 "type": "语速偏快",
                 "message": "这一阶段表达节奏可能偏快，建议在重点句后加入短暂停顿。",
             }
@@ -148,7 +148,7 @@ def build_issues(transcript: dict, visual_metrics: dict) -> list[dict]:
     if not transcript.get("mock_mode") and transcript.get("logic_words_count", 0) < 3:
         issues.append(
             {
-                "time": _issue_time(transcript, 0.15, "00:15"),
+                "time": "全文",
                 "type": "结构提示",
                 "message": "没有检测到足够的逻辑连接词，建议用更清晰的顺序词组织观点。",
             }
@@ -175,7 +175,7 @@ def build_issues(transcript: dict, visual_metrics: dict) -> list[dict]:
     if visual_metrics.get("body_sway_score", 100) < 70:
         issues.append(
             {
-                "time": _issue_time(transcript, 0.6, "01:12"),
+                "time": "全程",
                 "type": "身体晃动",
                 "message": "检测到身体移动较明显，建议保持重心稳定。",
             }
@@ -184,7 +184,7 @@ def build_issues(transcript: dict, visual_metrics: dict) -> list[dict]:
     if visual_metrics.get("looking_camera_ratio", 1) < 0.6:
         issues.append(
             {
-                "time": _issue_time(transcript, 0.4, "00:48"),
+                "time": "全程",
                 "type": "镜头交流",
                 "message": "这一阶段镜头交流比例偏低，建议减少低头看稿。",
             }
@@ -193,7 +193,7 @@ def build_issues(transcript: dict, visual_metrics: dict) -> list[dict]:
     if visual_metrics.get("gesture_activity", 1) < 0.2:
         issues.append(
             {
-                "time": _issue_time(transcript, 0.55, "01:05"),
+                "time": "全程",
                 "type": "手势偏少",
                 "message": "这一阶段手势活动较少，可以在强调重点时加入自然手势。",
             }
@@ -213,6 +213,9 @@ def build_issues(transcript: dict, visual_metrics: dict) -> list[dict]:
 
 def build_summary(scores: dict) -> str:
     overall = scores.get("overall", 0)
+
+    if overall is None:
+        return "本次部分分析数据未达到可靠标准，系统不会用降级数据生成综合分；请根据可信度检查提示完善配置后重新分析。"
 
     if overall >= 85:
         return "本次演讲整体表现较好，内容、语音和视觉表达较均衡，可以继续提升细节表现。"
@@ -235,6 +238,28 @@ def _speech_status_message(transcript: dict) -> str:
     return "已完成真实语音识别。"
 
 
+def build_quality_assessment(transcript: dict, visual_metrics: dict) -> dict:
+    checks = []
+    duration = _duration_seconds(transcript)
+    word_count = int(transcript.get("word_count") or 0)
+    frame_count = int(visual_metrics.get("analysis_frame_count") or 0)
+    analyzed_duration = float(visual_metrics.get("analyzed_duration_seconds") or duration or 0)
+
+    speech_ok = not transcript.get("mock_mode") and word_count >= max(8, duration * 0.35)
+    visual_ok = not visual_metrics.get("mock_mode") and frame_count >= min(30, max(1, duration / 10))
+    coverage_ok = not duration or analyzed_duration >= duration * 0.9
+    checks.append({"label": "语音转写", "passed": speech_ok, "detail": f"识别 {word_count} 字，覆盖时长 {round(duration)} 秒。"})
+    checks.append({"label": "视觉抽帧", "passed": visual_ok, "detail": f"全程均匀分析 {frame_count} 帧。"})
+    checks.append({"label": "时长覆盖", "passed": coverage_ok, "detail": f"视觉覆盖约 {round(analyzed_duration)} / {round(duration)} 秒。"})
+    passed = sum(1 for item in checks if item["passed"])
+    level = "high" if passed == 3 else "medium" if passed == 2 else "low"
+    return {
+        "level": level,
+        "label": {"high": "数据质量良好", "medium": "部分结果需复核", "low": "结果仅供参考"}[level],
+        "checks": checks,
+    }
+
+
 def enrich_report(report: dict, transcript: dict, visual_metrics: dict, scores: dict) -> dict:
     report["transcript"] = transcript
     report["visual_metrics"] = visual_metrics
@@ -242,6 +267,7 @@ def enrich_report(report: dict, transcript: dict, visual_metrics: dict, scores: 
     report["suggestions"] = build_suggestions(transcript, visual_metrics)
     report["issues"] = build_issues(transcript, visual_metrics)
     report["summary"] = build_summary(scores)
+    report["quality_assessment"] = build_quality_assessment(transcript, visual_metrics)
     report["analysis_status"] = {
         "speech": {
             "mode": "mock" if transcript.get("mock_mode") else "real",

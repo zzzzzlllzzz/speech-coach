@@ -80,6 +80,7 @@ def _analyze_with_opencv(video_path: Path, frame_step: int, max_seconds: int, re
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
     max_frame_index = int(min(cap.get(cv2.CAP_PROP_FRAME_COUNT) or fps * max_seconds, fps * max_seconds))
+    frame_step = max(frame_step, math.ceil(max_frame_index / 300))
     cascade_path = Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml"
     face_detector = cv2.CascadeClassifier(str(cascade_path))
     if face_detector.empty():
@@ -221,6 +222,7 @@ def _analyze_with_opencv(video_path: Path, frame_step: int, max_seconds: int, re
         "face_block_count": face_block_count,
         "expression_change_score": expression_change_score,
         "analysis_frame_count": total,
+        "analyzed_duration_seconds": round(max_frame_index / fps, 2),
         "sample_interval_frames": frame_step,
         "head_down_events": head_down_events[:5],
         "face_block_events": face_block_events[:5],
@@ -240,7 +242,7 @@ def _analyze_with_opencv(video_path: Path, frame_step: int, max_seconds: int, re
     }
 
 
-def analyze_visual_metrics(video_path: Path, frame_step: int = 10, max_seconds: int = 180) -> dict:
+def analyze_visual_metrics(video_path: Path, frame_step: int = 30, max_seconds: int = 1800) -> dict:
     try:
         os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
         import cv2
@@ -258,6 +260,7 @@ def analyze_visual_metrics(video_path: Path, frame_step: int = 10, max_seconds: 
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
     max_frame_index = int(min(cap.get(cv2.CAP_PROP_FRAME_COUNT) or fps * max_seconds, fps * max_seconds))
+    frame_step = max(frame_step, math.ceil(max_frame_index / 300))
 
     try:
         mp_pose = mp.solutions.pose
@@ -428,6 +431,7 @@ def analyze_visual_metrics(video_path: Path, frame_step: int = 10, max_seconds: 
         "face_block_count": face_block_count,
         "expression_change_score": expression_change_score,
         "analysis_frame_count": total,
+        "analyzed_duration_seconds": round(max_frame_index / fps, 2),
         "sample_interval_frames": frame_step,
         "head_down_events": head_down_events[:5],
         "face_block_events": face_block_events[:5],

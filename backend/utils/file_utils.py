@@ -7,6 +7,10 @@ from fastapi import UploadFile
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
 
 
+class UploadTooLargeError(ValueError):
+    pass
+
+
 def ensure_upload_dir() -> None:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -18,13 +22,21 @@ def safe_upload_name(filename: str) -> str:
     return f"{cleaned_stem}_{uuid4().hex[:8]}{suffix}"
 
 
-async def save_upload_file(file: UploadFile) -> Path:
+async def save_upload_file(file: UploadFile, max_bytes: int | None = None) -> Path:
     ensure_upload_dir()
     destination = UPLOAD_DIR / safe_upload_name(file.filename or "video.mp4")
+    written = 0
 
-    with destination.open("wb") as buffer:
-        while chunk := await file.read(1024 * 1024):
-            buffer.write(chunk)
-
-    await file.close()
-    return destination
+    try:
+        with destination.open("wb") as buffer:
+            while chunk := await file.read(1024 * 1024):
+                written += len(chunk)
+                if max_bytes is not None and written > max_bytes:
+                    raise UploadTooLargeError("上传文件超过大小限制。")
+                buffer.write(chunk)
+        return destination
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+    finally:
+        await file.close()
