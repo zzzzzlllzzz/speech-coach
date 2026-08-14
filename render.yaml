@@ -12,7 +12,7 @@ services:
       - key: VOSK_MODEL_PATH
         value: /app/models/vosk-model-small-cn-0.22
       - key: CORS_ORIGINS
-        value: https://speech-coach.onrender.com
+        value: https://speech-coach-gdmd.onrender.com
 
   - type: web
     name: speech-coach
