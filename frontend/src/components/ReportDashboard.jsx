@@ -294,6 +294,7 @@ export default function ReportDashboard({ report, history = [], onReset, onPract
   const [scriptOptimization, setScriptOptimization] = useState(null);
   const [isOptimizingScript, setIsOptimizingScript] = useState(false);
   const [scriptOptimizationError, setScriptOptimizationError] = useState("");
+  const [scriptCopyStatus, setScriptCopyStatus] = useState("");
   const [selectedScoreKey, setSelectedScoreKey] = useState(null);
   const transcript = report.transcript || {};
   const visualMetrics = report.visual_metrics || {};
@@ -377,10 +378,21 @@ export default function ReportDashboard({ report, history = [], onReset, onPract
         structure_analysis: structureAnalysis,
       });
       setScriptOptimization(result);
+      setScriptCopyStatus("");
     } catch (error) {
       setScriptOptimizationError(error.message || "演讲稿优化失败，请稍后重试。");
     } finally {
       setIsOptimizingScript(false);
+    }
+  }
+
+  async function handleCopyScript(text, label) {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setScriptCopyStatus(`${label}已复制`);
+    } catch {
+      setScriptCopyStatus("复制失败，请手动选择文本复制");
     }
   }
 
@@ -588,7 +600,7 @@ export default function ReportDashboard({ report, history = [], onReset, onPract
               onClick={handleOptimizeScript}
               disabled={!canOptimizeScript || isOptimizingScript}
             >
-              {isOptimizingScript ? "优化中..." : "优化演讲稿"}
+              {isOptimizingScript ? "正在生成..." : "生成可排练导演稿"}
             </button>
             <span className={transcript.mock_mode ? "status-pill mock" : "status-pill"}>
               {transcript.mock_mode ? "Mock 模式" : "真实识别"}
@@ -643,12 +655,73 @@ export default function ReportDashboard({ report, history = [], onReset, onPract
           <div className="optimized-script-card">
             <div className="optimized-script-header">
               <div>
-                <span>DeepSeek 优化结果</span>
-                <h3>优化后的演讲稿</h3>
+                <span>{scriptOptimization.source === "deepseek" ? "DeepSeek 智能改写" : "可靠规则生成"}</span>
+                <h3>演讲导演稿</h3>
               </div>
               <small>{scriptOptimization.model}</small>
             </div>
-            <p>{scriptOptimization.optimized_text}</p>
+
+            <section className="script-version-block">
+              <div className="script-section-heading">
+                <div>
+                  <span className="script-section-kicker">用于提交与背诵</span>
+                  <h4>纯净改写稿</h4>
+                </div>
+                <button
+                  type="button"
+                  className="script-copy-button"
+                  onClick={() => handleCopyScript(scriptOptimization.optimized_text, "纯净稿")}
+                >
+                  复制纯净稿
+                </button>
+              </div>
+              <p className="clean-script-text">{scriptOptimization.optimized_text}</p>
+            </section>
+
+            {scriptOptimization.performance_segments?.length > 0 && (
+              <section className="director-script-block">
+                <div className="script-section-heading">
+                  <div>
+                    <span className="script-section-kicker">照着标注即可排练</span>
+                    <h4>逐句导演稿</h4>
+                  </div>
+                  <button
+                    type="button"
+                    className="script-copy-button"
+                    onClick={() => handleCopyScript(scriptOptimization.annotated_script, "导演稿")}
+                  >
+                    复制导演稿
+                  </button>
+                </div>
+                <div className="director-segment-list">
+                  {scriptOptimization.performance_segments.map((segment, index) => (
+                    <article className="director-segment" key={`${segment.section}-${index}`}>
+                      <div className="director-segment-meta">
+                        <span className="segment-number">{String(index + 1).padStart(2, "0")}</span>
+                        <strong>{segment.section || `第 ${index + 1} 段`}</strong>
+                        <span>{segment.pace || "正常"}</span>
+                        <span>句后停顿 {segment.pause_after_seconds ?? 0.8} 秒</span>
+                      </div>
+                      <p className="director-segment-text">{segment.text}</p>
+                      {segment.emphasis?.length > 0 && (
+                        <div className="emphasis-row">
+                          <span>重音</span>
+                          {segment.emphasis.map((word) => <mark key={word}>{word}</mark>)}
+                        </div>
+                      )}
+                      <dl className="stage-direction-grid">
+                        <div><dt>声音</dt><dd>{segment.voice || "自然清晰"}</dd></div>
+                        <div><dt>手势</dt><dd>{segment.gesture || "双手自然放松"}</dd></div>
+                        <div><dt>目光</dt><dd>{segment.eye_contact || "稳定看向听众"}</dd></div>
+                        <div><dt>站位</dt><dd>{segment.position || "保持稳定站姿"}</dd></div>
+                      </dl>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {scriptCopyStatus && <p className="script-copy-status" role="status">{scriptCopyStatus}</p>}
             <div className="optimized-script-grid">
               {scriptOptimization.outline?.length > 0 && (
                 <div>
