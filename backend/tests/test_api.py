@@ -1,11 +1,13 @@
 import os
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from main import app, safe_number, sanitize_video_info, sanitize_visual_metrics, speech_service_status
-from services.report_service import build_quality_assessment
+from services.report_service import build_issues, build_quality_assessment, build_suggestions
 from services.scoring_service import calculate_scores
+from services.aliyun_asr_service import _collect_text
 
 
 class ApiSafetyTests(unittest.TestCase):
@@ -68,6 +70,24 @@ class ApiSafetyTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_fast_analysis_refuses_fake_success_when_speech_fails(self):
+        failed = {
+            "text": "", "raw_text": "", "mock_mode": True,
+            "source": "fallback", "error": "测试语音服务失败",
+        }
+        with patch("main.transcribe_audio", return_value=failed):
+            response = self.client.post(
+                "/api/analyze-fast",
+                data={
+                    "filename": "speech.mp4",
+                    "video_info": '{"duration": 60}',
+                    "client_visual_metrics": '{"analysis_frame_count": 60}',
+                },
+                files={"audio_file": ("speech.wav", b"not-a-real-wave", "audio/wav")},
+            )
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("停止评分", response.json()["detail"])
+
     def test_untrusted_metrics_are_bounded(self):
         metrics = sanitize_visual_metrics(
             {
@@ -109,6 +129,55 @@ class ApiSafetyTests(unittest.TestCase):
         self.assertIsNone(scores["voice"])
         self.assertIsNone(scores["overall"])
         self.assertIsNotNone(scores["gesture"])
+
+    def test_voice_score_uses_real_audio_delivery_metrics(self):
+        transcript = {
+            "text": "这是一个足够长的真实演讲转写文本，用于验证声音表现评分。",
+            "word_count": 80,
+            "duration": 60,
+            "speech_rate": 160,
+            "speech_rate_reliable": True,
+            "mock_mode": False,
+            "has_opening": True,
+            "has_topic": True,
+            "has_ending": True,
+            "audio_metrics": {
+                "available": True,
+                "low_volume_ratio": 0.5,
+                "volume_stability_score": 40,
+                "long_pause_events": [{}, {}, {}, {}],
+            },
+        }
+        visual = {
+            "mock_mode": False, "gesture_activity": 0.3, "hand_visible_ratio": 0.5,
+            "body_sway_score": 80, "looking_camera_ratio": 0.7,
+        }
+        self.assertLess(calculate_scores(transcript, visual)["voice"], 82)
+
+    def test_mock_visual_metrics_do_not_generate_fake_visual_findings(self):
+        transcript = {
+            "text": "这是有效的真实转写文本。", "word_count": 30, "duration": 30,
+            "speech_rate": 150, "mock_mode": False, "has_opening": True,
+            "has_topic": True, "has_ending": True, "logic_words_count": 3,
+        }
+        visual = {
+            "mock_mode": True, "looking_camera_ratio": 0,
+            "gesture_activity": 0, "head_down_count": 99,
+            "body_sway_score": 0, "head_down_events": ["00:05"],
+        }
+        suggestions = "".join(build_suggestions(transcript, visual))
+        issues = "".join(item["type"] for item in build_issues(transcript, visual))
+        self.assertNotIn("镜头交流比例偏低", suggestions)
+        self.assertNotIn("低头", suggestions + issues)
+
+    def test_aliyun_nested_callback_text_is_collected(self):
+        payload = {
+            "payload": {
+                "result": "第一句",
+                "nested": [{"text": "第二句"}],
+            }
+        }
+        self.assertEqual(_collect_text(payload), ["第一句", "第二句"])
 
 
 if __name__ == "__main__":

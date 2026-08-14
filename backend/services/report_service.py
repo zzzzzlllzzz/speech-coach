@@ -78,6 +78,8 @@ def build_suggestions(transcript: dict, visual_metrics: dict) -> list[str]:
     face_block_count = visual_metrics.get("face_block_count", 0)
     head_down_count = visual_metrics.get("head_down_count", 0)
     body_sway_score = visual_metrics.get("body_sway_score", 100)
+    audio_metrics = transcript.get("audio_metrics") or {}
+    visual_reliable = not visual_metrics.get("mock_mode")
 
     if transcript.get("mock_mode"):
         suggestions.append("语音识别本次未完成，文本维度不参与可靠判断；请确认声音清晰，并检查阿里云 ASR 或 Vosk 服务是否可用后重新分析。")
@@ -93,20 +95,26 @@ def build_suggestions(transcript: dict, visual_metrics: dict) -> list[str]:
         suggestions.append("你的语速偏快，建议在重点观点后停顿 1 秒，让观众有理解时间。")
     if speech_rate_reliable and speech_rate < 120:
         suggestions.append("你的语速偏慢，建议适当提升节奏，让表达更有活力。")
-    if looking_camera_ratio < 0.6:
+    if visual_reliable and looking_camera_ratio < 0.6:
         suggestions.append("你的镜头交流比例偏低，建议减少低头看稿，每讲完一个观点后看向镜头。")
-    if gesture_activity < 0.2:
+    if visual_reliable and gesture_activity < 0.2:
         suggestions.append("你的手势活跃度偏低，建议在列举观点或强调关键词时加入自然开放式手势。")
-    if gesture_activity > 0.55:
+    if visual_reliable and gesture_activity > 0.55:
         suggestions.append("你的手势活动较频繁，建议减少无意义摆动，让手势更多服务于重点表达。")
-    if face_block_count is not None and face_block_count > 3:
+    if visual_reliable and face_block_count is not None and face_block_count > 3:
         suggestions.append("检测到多次手部靠近面部，建议演讲时避免摸脸或遮挡面部。")
-    if head_down_count > 5:
+    if visual_reliable and head_down_count > 5:
         suggestions.append("检测到低头次数较多，建议将提纲放在视线更高的位置，减少长时间看稿。")
-    if body_sway_score < 70:
+    if visual_reliable and body_sway_score < 70:
         suggestions.append("你的身体稳定性还有提升空间，建议双脚站稳，保持身体重心稳定。")
     if not transcript.get("mock_mode") and filler_total > 10:
         suggestions.append("本次演讲中口头禅较多，建议用短暂停顿代替‘嗯、啊、然后’等填充词。")
+    if audio_metrics.get("available") and audio_metrics.get("low_volume_ratio", 0) > 0.35:
+        suggestions.append("较多音频片段音量偏低，建议缩短与麦克风的距离，并保持声音稳定送出。")
+    if audio_metrics.get("available") and audio_metrics.get("volume_stability_score", 100) < 55:
+        suggestions.append("音量波动较明显，建议用腹式呼吸支撑句尾，避免一句话后半段突然变轻。")
+    if len(audio_metrics.get("long_pause_events") or []) > 3:
+        suggestions.append("检测到多次超过 1.5 秒的停顿，建议把逐字稿改成关键词提纲，减少长时间找词。")
 
     fallback_suggestions = [
         "建议在每个重点观点后进行短暂停顿，增强表达层次。",
@@ -126,6 +134,8 @@ def build_issues(transcript: dict, visual_metrics: dict) -> list[dict]:
     issues = []
     filler_total = get_filler_total(transcript)
     speech_rate_reliable = transcript.get("speech_rate_reliable", True)
+    audio_metrics = transcript.get("audio_metrics") or {}
+    visual_reliable = not visual_metrics.get("mock_mode")
 
     if not transcript.get("mock_mode") and filler_total > 10:
         issues.append(
@@ -154,7 +164,16 @@ def build_issues(transcript: dict, visual_metrics: dict) -> list[dict]:
             }
         )
 
-    for event_time in visual_metrics.get("head_down_events", [])[:2]:
+    for event in (audio_metrics.get("long_pause_events") or [])[:3]:
+        issues.append(
+            {
+                "time": _clamp_issue_time(transcript, event.get("time"), 0.5),
+                "type": "停顿过长",
+                "message": f"这一处连续停顿约 {event.get('duration', 0)} 秒。若不是刻意留白，建议用关键词提纲减少找词时间。",
+            }
+        )
+
+    for event_time in (visual_metrics.get("head_down_events", []) if visual_reliable else [])[:2]:
         issues.append(
             {
                 "time": _clamp_issue_time(transcript, event_time, 0.3),
@@ -163,7 +182,7 @@ def build_issues(transcript: dict, visual_metrics: dict) -> list[dict]:
             }
         )
 
-    for event_time in visual_metrics.get("face_block_events", [])[:2]:
+    for event_time in (visual_metrics.get("face_block_events", []) if visual_reliable else [])[:2]:
         issues.append(
             {
                 "time": _clamp_issue_time(transcript, event_time, 0.35),
@@ -172,7 +191,7 @@ def build_issues(transcript: dict, visual_metrics: dict) -> list[dict]:
             }
         )
 
-    if visual_metrics.get("body_sway_score", 100) < 70:
+    if visual_reliable and visual_metrics.get("body_sway_score", 100) < 70:
         issues.append(
             {
                 "time": "全程",
@@ -181,7 +200,7 @@ def build_issues(transcript: dict, visual_metrics: dict) -> list[dict]:
             }
         )
 
-    if visual_metrics.get("looking_camera_ratio", 1) < 0.6:
+    if visual_reliable and visual_metrics.get("looking_camera_ratio", 1) < 0.6:
         issues.append(
             {
                 "time": "全程",
@@ -190,7 +209,7 @@ def build_issues(transcript: dict, visual_metrics: dict) -> list[dict]:
             }
         )
 
-    if visual_metrics.get("gesture_activity", 1) < 0.2:
+    if visual_reliable and visual_metrics.get("gesture_activity", 1) < 0.2:
         issues.append(
             {
                 "time": "全程",
@@ -244,15 +263,19 @@ def build_quality_assessment(transcript: dict, visual_metrics: dict) -> dict:
     word_count = int(transcript.get("word_count") or 0)
     frame_count = int(visual_metrics.get("analysis_frame_count") or 0)
     analyzed_duration = float(visual_metrics.get("analyzed_duration_seconds") or duration or 0)
+    audio_metrics = transcript.get("audio_metrics") or {}
+    audio_duration = float(audio_metrics.get("analyzed_duration_seconds") or 0)
 
     speech_ok = not transcript.get("mock_mode") and word_count >= max(8, duration * 0.35)
     visual_ok = not visual_metrics.get("mock_mode") and frame_count >= min(30, max(1, duration / 10))
-    coverage_ok = not duration or analyzed_duration >= duration * 0.9
+    coverage_ok = not visual_metrics.get("mock_mode") and (not duration or analyzed_duration >= duration * 0.9)
+    audio_ok = bool(audio_metrics.get("available")) and (not duration or audio_duration >= duration * 0.9)
     checks.append({"label": "语音转写", "passed": speech_ok, "detail": f"识别 {word_count} 字，覆盖时长 {round(duration)} 秒。"})
     checks.append({"label": "视觉抽帧", "passed": visual_ok, "detail": f"全程均匀分析 {frame_count} 帧。"})
     checks.append({"label": "时长覆盖", "passed": coverage_ok, "detail": f"视觉覆盖约 {round(analyzed_duration)} / {round(duration)} 秒。"})
+    checks.append({"label": "完整音轨", "passed": audio_ok, "detail": f"声音覆盖约 {round(audio_duration)} / {round(duration)} 秒。"})
     passed = sum(1 for item in checks if item["passed"])
-    level = "high" if passed == 3 else "medium" if passed == 2 else "low"
+    level = "high" if passed == len(checks) else "medium" if passed >= 2 else "low"
     return {
         "level": level,
         "label": {"high": "数据质量良好", "medium": "部分结果需复核", "low": "结果仅供参考"}[level],

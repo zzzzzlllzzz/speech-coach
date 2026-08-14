@@ -1,4 +1,5 @@
 import VideoPreview from "./VideoPreview";
+import { TRAINING_FOCUSES, TRAINING_SCENARIOS } from "../trainingPlan";
 
 function formatHistoryTime(value) {
   if (!value) return "";
@@ -29,8 +30,11 @@ export default function UploadPanel({
   onFileSelect,
   onOpenHistory,
   onShowProgress,
+  onTrainingContextChange,
   onUseDemo,
   previewUrl,
+  trainingContext,
+  videoInfo,
 }) {
   const handleChange = (event) => {
     const nextFile = event.target.files?.[0];
@@ -70,6 +74,46 @@ export default function UploadPanel({
         <div className="recording-checks" aria-label="录制建议">
           <span>人脸与上半身入镜</span><span>声音清晰</span><span>支持最长 30 分钟</span>
         </div>
+
+        <section className="training-setup" aria-labelledby="training-setup-title">
+          <div className="training-setup-heading">
+            <span>训练目标</span>
+            <strong id="training-setup-title">先告诉教练你要练什么</strong>
+          </div>
+          <div className="setup-field">
+            <span>使用场景</span>
+            <div className="choice-chips">
+              {TRAINING_SCENARIOS.map((item) => (
+                <button
+                  className={trainingContext.scenario === item.value ? "active" : ""}
+                  key={item.value}
+                  type="button"
+                  title={item.hint}
+                  onClick={() => onTrainingContextChange({ scenario: item.value })}
+                >{item.label}</button>
+              ))}
+            </div>
+          </div>
+          <div className="setup-field">
+            <span>本轮重点</span>
+            <select
+              value={trainingContext.focus}
+              onChange={(event) => onTrainingContextChange({ focus: event.target.value })}
+            >
+              {TRAINING_FOCUSES.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}
+            </select>
+          </div>
+          <div className="setup-field duration-field">
+            <span>目标时长</span>
+            <select
+              value={trainingContext.targetMinutes}
+              onChange={(event) => onTrainingContextChange({ targetMinutes: Number(event.target.value) })}
+            >
+              {[1, 3, 5, 10, 20, 30].map((minutes) => <option value={minutes} key={minutes}>{minutes} 分钟</option>)}
+            </select>
+            <small>分析仍覆盖完整视频；目标时长用于复练时控制表达篇幅。</small>
+          </div>
+        </section>
         <label className="upload-zone">
           <input
             type="file"
@@ -83,6 +127,21 @@ export default function UploadPanel({
         </label>
 
         {previewUrl && <VideoPreview src={previewUrl} />}
+
+        {file && (
+          <div className={`video-readiness ${videoInfo?.error ? "warning" : ""}`}>
+            <strong>{videoInfo ? (videoInfo.error ? "视频预检需要注意" : "视频预检通过") : "正在读取视频信息…"}</strong>
+            {videoInfo && !videoInfo.error && (
+              <span>
+                {Math.floor((videoInfo.duration || 0) / 60)}分{Math.round((videoInfo.duration || 0) % 60)}秒 · {(file.size / 1024 / 1024).toFixed(1)}MB ·
+                {(videoInfo.duration || 0) > 300
+                  ? ` 将全程均匀抽帧并上传完整音频，稳定转写预计至少 ${Math.max(2, Math.ceil((videoInfo.duration || 0) / 120))} 分钟`
+                  : " 将优先本地提取音频以加快分析"}
+              </span>
+            )}
+            {videoInfo?.error && <span>浏览器无法读取时长或编码，仍可尝试分析；失败后会给出明确原因，不会生成模拟评分。</span>}
+          </div>
+        )}
 
         {error && <p className="error-text">{error}</p>}
 

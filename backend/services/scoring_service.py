@@ -77,6 +77,7 @@ def score_voice(transcript: dict) -> int:
     speech_rate = transcript.get("speech_rate", 0)
     filler_total = get_filler_total(transcript)
     word_count = _word_count(transcript)
+    audio_metrics = transcript.get("audio_metrics") or {}
 
     if 120 <= speech_rate <= 190:
         score = 82
@@ -94,6 +95,15 @@ def score_voice(transcript: dict) -> int:
         score -= 10
     elif filler_total > 10:
         score -= 5
+
+    if audio_metrics.get("available"):
+        if audio_metrics.get("low_volume_ratio", 0) > 0.35:
+            score -= 8
+        if audio_metrics.get("volume_stability_score", 100) < 55:
+            score -= 8
+        long_pauses = len(audio_metrics.get("long_pause_events") or [])
+        if long_pauses > max(3, _duration(transcript) / 90):
+            score -= 6
 
     return clamp_score(score)
 

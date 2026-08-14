@@ -9,8 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from services.aliyun_asr_service import get_aliyun_asr_status
-from services.aliyun_asr_service import aliyun_asr_enabled
 from services.audio_service import extract_audio
+from services.audio_metrics_service import analyze_audio_delivery
 from services.gesture_service import analyze_visual_metrics, build_mock_visual_metrics
 from services.report_service import build_fallback_report, build_report_shell, enrich_report
 from services.scoring_service import calculate_scores
@@ -44,7 +44,10 @@ def get_cors_origins() -> list[str]:
     origins = os.getenv("CORS_ORIGINS", "").strip()
     if origins:
         return [origin.strip() for origin in origins.split(",") if origin.strip()]
-    return ["http://localhost:5173", "http://127.0.0.1:5173"]
+    return [
+        "http://localhost:5173", "http://127.0.0.1:5173",
+        "http://localhost:5174", "http://127.0.0.1:5174",
+    ]
 
 
 def use_mock_mode() -> bool:
@@ -54,7 +57,8 @@ def use_mock_mode() -> bool:
 def speech_service_status() -> dict:
     chinese_model = Path(os.getenv("VOSK_MODEL_PATH", "models/vosk-model-small-cn-0.22"))
     english_model = Path(os.getenv("VOSK_EN_MODEL_PATH", "models/vosk-model-small-en-us-0.15"))
-    aliyun_ready = aliyun_asr_enabled()
+    aliyun_status = get_aliyun_asr_status(check_token=False)
+    aliyun_ready = bool(aliyun_status["enabled"] and aliyun_status["sdk_available"])
     offline_ready = any(
         (model / "am" / "final.mdl").is_file() and (model / "conf" / "model.conf").is_file()
         for model in (chinese_model, english_model)
@@ -251,12 +255,20 @@ async def analyze_video(
         transcription = transcribe_audio(audio_result.audio_path)
         duration = video_info.get("duration") or audio_result.duration or 120
 
+        if transcription["mock_mode"]:
+            reason = transcription.get("error") or "未识别到有效语音"
+            raise HTTPException(
+                status_code=422,
+                detail=f"语音识别未完成：{reason}。系统已停止评分，避免生成不准确报告。",
+            )
+
         logger.info("文本分析")
         transcript = analyze_text(
             text=transcription["text"],
             duration=duration,
             mock_mode=transcription["mock_mode"],
         )
+        transcript["audio_metrics"] = analyze_audio_delivery(audio_result.audio_path)
 
         if audio_result.audio_path:
             transcript["audio_file"] = audio_result.audio_path.name
@@ -280,9 +292,11 @@ async def analyze_video(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("分析失败，返回 fallback 报告")
-        filename = saved_path.name if saved_path else (file.filename or "demo.mp4")
-        return build_fallback_report(filename, "分析服务暂时不可用，已自动切换到演示报告。")
+        logger.exception("视频分析失败")
+        raise HTTPException(
+            status_code=502,
+            detail="视频分析未完成，系统不会用模拟数据代替真实结果。请检查视频声音和编码后重试。",
+        ) from exc
     finally:
         cleanup_file(saved_path)
         cleanup_file(extracted_audio_path)
@@ -320,11 +334,19 @@ async def analyze_fast(
             audio_path = await save_upload_file(audio_file, max_bytes=MAX_FAST_AUDIO_SIZE)
             transcription = transcribe_audio(audio_path)
 
+        if transcription["mock_mode"]:
+            reason = transcription.get("error") or "未识别到有效语音"
+            raise HTTPException(
+                status_code=422,
+                detail=f"语音识别未完成：{reason}。系统已停止评分，避免生成不准确报告。",
+            )
+
         transcript = analyze_text(
             text=transcription["text"],
             duration=duration,
             mock_mode=transcription["mock_mode"],
         )
+        transcript["audio_metrics"] = analyze_audio_delivery(audio_path)
         transcript["source"] = transcription.get("source", "fallback")
         transcript["raw_text"] = transcription.get("raw_text", transcription["text"])
         transcript["polish_source"] = transcription.get("polish_source", "none")
@@ -365,11 +387,11 @@ async def analyze_fast(
         raise HTTPException(status_code=413, detail="提取后的音频不能超过 80MB。")
     except HTTPException:
         raise
-    except Exception:
-        logger.exception("快速分析失败，返回 fallback 报告")
-        return build_fallback_report(
-            filename,
-            "快速分析服务暂时不可用，已自动切换到演示报告。",
-        )
+    except Exception as exc:
+        logger.exception("快速分析失败")
+        raise HTTPException(
+            status_code=502,
+            detail="快速分析未完成，系统不会用模拟数据代替真实结果。请重新上传，或改用完整视频分析。",
+        ) from exc
     finally:
         cleanup_file(audio_path)

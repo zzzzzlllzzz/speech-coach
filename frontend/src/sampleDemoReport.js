@@ -34,6 +34,15 @@ export const sampleDemoReport = {
       ending: { detected: true, reason: "结尾有总结和感谢，收束清楚。" },
       topic: { detected: true, reason: "主题集中在 AI 对公众表达训练的帮助。" },
     },
+    audio_metrics: {
+      available: true,
+      silence_ratio: 0.12,
+      low_volume_ratio: 0.08,
+      volume_stability_score: 84,
+      long_pause_events: [{ time: "00:34", duration: 1.8 }],
+      analyzed_duration_seconds: 58,
+      analysis_window_seconds: 0.25,
+    },
   },
   visual_metrics: {
     mock_mode: false,
@@ -86,6 +95,7 @@ export const sampleDemoReport = {
       { label: "语音转写", passed: true, detail: "识别 132 字，覆盖时长 58 秒。" },
       { label: "视觉抽帧", passed: true, detail: "全程均匀分析 52 帧。" },
       { label: "时长覆盖", passed: true, detail: "视觉覆盖约 58 / 58 秒。" },
+      { label: "完整音轨", passed: true, detail: "声音覆盖约 58 / 58 秒。" },
     ],
   },
   analysis_status: {

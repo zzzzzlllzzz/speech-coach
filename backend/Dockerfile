@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY . .
 
 # Cache a lightweight Chinese ASR model during build when the network allows it.
-# If the download is unavailable, runtime fallback still keeps demos working.
+# If the download is unavailable, configure Aliyun ASR before enabling real analysis.
 RUN python scripts/download_vosk_model.py || true
 
 EXPOSE 8000

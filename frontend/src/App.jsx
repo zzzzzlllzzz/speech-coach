@@ -1,15 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { analyzeFastVideo, analyzeVideo, getServiceStatus } from "./api";
 import { attachIssueFrames, getVideoInfo } from "./videoFrames";
 import UploadPanel from "./components/UploadPanel";
 import ProgressPanel from "./components/ProgressPanel";
-import ReportDashboard from "./components/ReportDashboard";
 import { sampleDemoReport } from "./sampleDemoReport";
 import AppHeader from "./components/AppHeader";
 import HistoryDashboard from "./components/HistoryDashboard";
 import OnboardingGuide from "./components/OnboardingGuide";
 import TrainingGuide from "./components/TrainingGuide";
 import { MAX_VIDEO_DURATION_SECONDS, shouldStreamFullVideo } from "./analysisPlan";
+import { DEFAULT_TRAINING_CONTEXT } from "./trainingPlan";
+
+const ReportDashboard = lazy(() => import("./components/ReportDashboard"));
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".mp4", ".mov", ".avi", ".mkv"];
@@ -17,6 +19,18 @@ const HISTORY_STORAGE_KEY = "speech-coach-ai-history";
 const ANALYSIS_DRAFT_STORAGE_KEY = "speech-coach-ai-analysis-draft";
 const MAX_HISTORY_ITEMS = 8;
 const ONBOARDING_STORAGE_KEY = "speech-coach-ai-onboarding-complete";
+const TRAINING_CONTEXT_STORAGE_KEY = "speech-coach-ai-training-context";
+
+function readTrainingContext() {
+  try {
+    return {
+      ...DEFAULT_TRAINING_CONTEXT,
+      ...JSON.parse(window.localStorage.getItem(TRAINING_CONTEXT_STORAGE_KEY) || "{}"),
+    };
+  } catch {
+    return DEFAULT_TRAINING_CONTEXT;
+  }
+}
 
 function validateVideoFile(file) {
   const lowerName = file.name.toLowerCase();
@@ -97,6 +111,8 @@ export default function App() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [report, setReport] = useState(null);
+  const [selectedVideoInfo, setSelectedVideoInfo] = useState(null);
+  const [trainingContext, setTrainingContext] = useState(() => readTrainingContext());
   const [history, setHistory] = useState(() => readHistory());
   const [stage, setStage] = useState("upload");
   const [activeView, setActiveView] = useState("train");
@@ -129,7 +145,14 @@ export default function App() {
     }
 
     setSelectedFile(file);
+    setSelectedVideoInfo(null);
     setError("");
+  };
+
+  const handleTrainingContextChange = (nextContext) => {
+    const normalized = { ...trainingContext, ...nextContext };
+    setTrainingContext(normalized);
+    window.localStorage.setItem(TRAINING_CONTEXT_STORAGE_KEY, JSON.stringify(normalized));
   };
 
   useEffect(() => {
@@ -141,6 +164,22 @@ export default function App() {
     const url = URL.createObjectURL(selectedFile);
     setPreviewUrl(url);
     return () => URL.revokeObjectURL(url);
+  }, [selectedFile]);
+
+  useEffect(() => {
+    if (!selectedFile) {
+      setSelectedVideoInfo(null);
+      return undefined;
+    }
+    let active = true;
+    getVideoInfo(selectedFile)
+      .then((info) => {
+        if (active) setSelectedVideoInfo(info);
+      })
+      .catch(() => {
+        if (active) setSelectedVideoInfo({ error: true });
+      });
+    return () => { active = false; };
   }, [selectedFile]);
 
   useEffect(() => {
@@ -295,7 +334,7 @@ export default function App() {
         () => result.issues || []
       );
       throwIfCancelled();
-      result = { ...result, issues: framedIssues };
+      result = { ...result, issues: framedIssues, training_context: trainingContext };
       const nextHistory = [createHistoryItem(selectedFile, result), ...history].slice(
         0,
         MAX_HISTORY_ITEMS
@@ -355,6 +394,7 @@ export default function App() {
 
       throwIfCancelled();
       const result = JSON.parse(JSON.stringify(sampleDemoReport));
+      result.training_context = trainingContext;
       const demoFile = { name: result.video_info.filename };
       setAnalysisActive(false);
       analysisAbortRef.current = null;
@@ -449,10 +489,13 @@ export default function App() {
           onAnalyze={handleAnalyze}
           onClearHistory={handleClearHistory}
           onFileSelect={handleFileSelect}
+          onTrainingContextChange={handleTrainingContextChange}
           onOpenHistory={handleOpenHistory}
           onShowProgress={() => setStage("analyzing")}
           onUseDemo={handleUseDemo}
           previewUrl={previewUrl}
+          trainingContext={trainingContext}
+          videoInfo={selectedVideoInfo}
           history={history}
         />
       )}
@@ -467,12 +510,15 @@ export default function App() {
       )}
 
       {activeView === "train" && stage === "report" && report && (
-        <ReportDashboard
-          report={report}
-          history={history}
-          onReset={handleReset}
-          analysisActive={analysisActive}
-        />
+        <Suspense fallback={<section className="center-panel"><div className="loader" /><h2>正在打开训练报告</h2></section>}>
+          <ReportDashboard
+            report={report}
+            history={history}
+            onReset={handleReset}
+            onPracticeAgain={handleReset}
+            analysisActive={analysisActive}
+          />
+        </Suspense>
       )}
       {showOnboarding && <OnboardingGuide onClose={handleCloseOnboarding} />}
     </main>

@@ -31,7 +31,7 @@ function getStatusText(progress) {
   if (progress < 25) return "正在做本地预处理，页面没有卡住，请保持当前窗口打开。";
   if (progress < 70) return "正在逐帧分析姿态、手势和镜头交流，大视频会自动降低抽帧密度。";
   if (progress < 88) return "正在上传必要数据。大视频会优先上传音频和视觉指标，减少等待。";
-  if (progress < 96) return "后端正在进行语音识别、文本整理和评分，进度会在结果返回后继续完成。";
+  if (progress < 96) return "后端正在按稳定速率识别完整音轨。长演讲会更久，请保持页面打开，系统不会截断后半段。";
   return "报告即将完成";
 }
 

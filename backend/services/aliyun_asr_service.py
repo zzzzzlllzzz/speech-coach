@@ -115,8 +115,7 @@ def get_aliyun_asr_status(check_token: bool = False) -> dict:
 
 
 def _collect_text(payload: object) -> list[str]:
-    sentence_texts: list[str] = []
-    completed_texts: list[str] = []
+    texts: list[str] = []
     if isinstance(payload, dict):
         for key, value in payload.items():
             if key in {"result", "text", "sentence"} and isinstance(value, str) and value.strip():
@@ -140,11 +139,16 @@ def _get_audio_chunk_size() -> int:
     return max(640, chunk_size + (chunk_size % 2))
 
 
-def _get_send_interval() -> float:
+def _get_send_interval(chunk_size: int) -> float:
+    configured = os.getenv("ALIYUN_NLS_SEND_INTERVAL")
+    if configured is None:
+        # The official Python example sends roughly at 2x real-time. Pushing an entire
+        # recording almost instantly can overload the gateway and lose callbacks.
+        return chunk_size / (16000 * 2) * 0.5
     try:
-        return max(0.0, float(os.getenv("ALIYUN_NLS_SEND_INTERVAL", "0.005")))
+        return max(0.0, float(configured))
     except ValueError:
-        return 0.005
+        return chunk_size / (16000 * 2) * 0.5
 
 
 def _read_pcm_chunks(audio_path: Path, chunk_size: int | None = None):
@@ -178,7 +182,8 @@ def transcribe_with_aliyun(audio_path: Path) -> dict:
             "error": f"阿里云语音 SDK 不可用：{exc}",
         }
 
-    texts: list[str] = []
+    sentence_texts: list[str] = []
+    completed_texts: list[str] = []
     errors: list[str] = []
     done = threading.Event()
 
@@ -247,8 +252,9 @@ def transcribe_with_aliyun(audio_path: Path) -> dict:
                 "error": "阿里云语音识别启动失败",
             }
 
-        send_interval = _get_send_interval()
-        for chunk in _read_pcm_chunks(audio_path):
+        chunk_size = _get_audio_chunk_size()
+        send_interval = _get_send_interval(chunk_size)
+        for chunk in _read_pcm_chunks(audio_path, chunk_size):
             transcriber.send_audio(chunk)
             if send_interval:
                 time.sleep(send_interval)

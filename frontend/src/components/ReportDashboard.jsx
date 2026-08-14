@@ -4,6 +4,8 @@ import { optimizeScript } from "../api";
 import RadarChart from "./RadarChart";
 import ScoreCard from "./ScoreCard";
 import TimelineIssues from "./TimelineIssues";
+import PracticeCoach from "./PracticeCoach";
+import { TRAINING_FOCUSES, TRAINING_SCENARIOS } from "../trainingPlan";
 
 const scoreKeys = ["content", "voice", "gesture", "posture", "camera_contact", "overall"];
 
@@ -60,6 +62,10 @@ const metricLabels = {
   hand_visible_ratio: "手部可见比例",
   face_block_count: "遮脸次数",
   expression_change_score: "表情变化分",
+  silence_ratio: "静音占比",
+  low_volume_ratio: "低音量片段",
+  volume_stability_score: "音量稳定分",
+  long_pause_count: "过长停顿",
 };
 
 const keyMetricKeys = [
@@ -284,13 +290,14 @@ function buildDimensionDetail(key, context) {
   };
 }
 
-export default function ReportDashboard({ report, history = [], onReset, analysisActive = false }) {
+export default function ReportDashboard({ report, history = [], onReset, onPracticeAgain, analysisActive = false }) {
   const [scriptOptimization, setScriptOptimization] = useState(null);
   const [isOptimizingScript, setIsOptimizingScript] = useState(false);
   const [scriptOptimizationError, setScriptOptimizationError] = useState("");
   const [selectedScoreKey, setSelectedScoreKey] = useState(null);
   const transcript = report.transcript || {};
   const visualMetrics = report.visual_metrics || {};
+  const audioMetrics = transcript.audio_metrics || {};
   const scores = report.scores || {};
   const issues = report.issues || [];
   const suggestions = report.suggestions || [];
@@ -299,6 +306,9 @@ export default function ReportDashboard({ report, history = [], onReset, analysi
   const hasDemoMode = transcript.mock_mode || visualMetrics.mock_mode;
   const analysisStatus = report.analysis_status || {};
   const qualityAssessment = report.quality_assessment;
+  const trainingContext = report.training_context || {};
+  const scenarioLabel = TRAINING_SCENARIOS.find((item) => item.value === trainingContext.scenario)?.label;
+  const focusLabel = TRAINING_FOCUSES.find((item) => item.value === trainingContext.focus)?.label;
   const keyMetrics = {
     speech_rate: transcript.speech_rate,
     filler_total: fillerTotal,
@@ -346,7 +356,10 @@ export default function ReportDashboard({ report, history = [], onReset, analysi
       item.summary === report.summary
     )
   );
-  const previousReport = currentHistoryIndex >= 0 ? history[currentHistoryIndex + 1] : history[1];
+  const previousCandidates = currentHistoryIndex >= 0 ? history.slice(currentHistoryIndex + 1) : history.slice(1);
+  const previousReport = previousCandidates.find((item) =>
+    !trainingContext.scenario || item.report?.training_context?.scenario === trainingContext.scenario
+  ) || previousCandidates[0];
   const overallDelta = previousReport && Number.isFinite(previousReport.overall) && Number.isFinite(scores.overall)
     ? scores.overall - previousReport.overall
     : null;
@@ -378,10 +391,17 @@ export default function ReportDashboard({ report, history = [], onReset, analysi
           <p className="eyebrow">训练报告</p>
           <h1>Speech Coach 分析结果</h1>
           <p>{report.summary}</p>
+          {(scenarioLabel || focusLabel) && (
+            <div className="report-context">
+              {scenarioLabel && <span>场景：{scenarioLabel}</span>}
+              {focusLabel && <span>目标：{focusLabel}</span>}
+              {trainingContext.targetMinutes && <span>目标时长：{trainingContext.targetMinutes} 分钟</span>}
+            </div>
+          )}
         </div>
         <div className="report-actions">
           <button className="secondary-button" onClick={() => window.print()}>
-            导出演示报告
+            打印 / 导出报告
           </button>
           <button className="secondary-button" onClick={onReset} disabled={analysisActive}>
             {analysisActive ? "分析进行中" : "重新上传并分析"}
@@ -438,6 +458,33 @@ export default function ReportDashboard({ report, history = [], onReset, analysi
         </div>
       </div>
 
+      <PracticeCoach report={report} onPracticeAgain={onPracticeAgain || onReset} />
+
+      {!report.video_info?.demo_sample && previousReport?.report?.scores && (
+        <article className="panel comparison-panel">
+          <div className="panel-title-row">
+            <div><span>同场景复测</span><h2>比上一次具体进步在哪里</h2></div>
+            <span className="status-pill">
+              {overallDelta === null ? "综合分暂无可比数据" : `综合分 ${overallDelta >= 0 ? "+" : ""}${overallDelta}`}
+            </span>
+          </div>
+          <div className="comparison-grid">
+            {scoreKeys.filter((key) => key !== "overall").map((key) => {
+              const before = previousReport.report.scores?.[key];
+              const current = scores[key];
+              const delta = Number.isFinite(before) && Number.isFinite(current) ? current - before : null;
+              return (
+                <div key={key}>
+                  <span>{scoreLabels[key]}</span>
+                  <strong>{delta === null ? "—" : `${delta >= 0 ? "+" : ""}${delta}`}</strong>
+                  <small>{delta === null ? "暂无可比数据" : `${before} → ${current}`}</small>
+                </div>
+              );
+            })}
+          </div>
+        </article>
+      )}
+
       <div className="score-grid">
         {scoreKeys.map((key) => (
           <ScoreCard key={key} name={key} value={scores[key]} onClick={() => setSelectedScoreKey(key)} />
@@ -462,6 +509,29 @@ export default function ReportDashboard({ report, history = [], onReset, analysi
           </div>
         </article>
       </div>
+
+      {audioMetrics.available && (
+        <article className="panel audio-delivery-panel">
+          <div className="panel-title-row">
+            <div><span>完整音轨分析</span><h2>声音呈现</h2></div>
+            <span className="status-pill">覆盖 {Math.round(audioMetrics.analyzed_duration_seconds || 0)} 秒</span>
+          </div>
+          <div className="metric-grid">
+            {[
+              ["silence_ratio", audioMetrics.silence_ratio],
+              ["low_volume_ratio", audioMetrics.low_volume_ratio],
+              ["volume_stability_score", audioMetrics.volume_stability_score],
+              ["long_pause_count", audioMetrics.long_pause_events?.length || 0],
+            ].map(([key, value]) => (
+              <div className="metric-item" key={key}>
+                <span>{metricLabels[key]}</span>
+                <strong>{key === "long_pause_count" ? `${value} 次` : formatMetric(key, value, transcript)}</strong>
+              </div>
+            ))}
+          </div>
+          <p className="metric-explainer">静音并不一定是问题：系统只把连续超过 1.5 秒的片段标为时间点，请结合是否为刻意停顿判断。</p>
+        </article>
+      )}
 
       <article className="panel action-plan-panel">
         <div className="panel-title-row">

@@ -1,7 +1,7 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   (import.meta.env.DEV ? "http://localhost:8000" : "");
-const ANALYZE_TIMEOUT_MS = 900000;
+const ANALYZE_TIMEOUT_MS = 2100000;
 const JSON_TIMEOUT_MS = 60000;
 
 export async function getServiceStatus() {
@@ -89,7 +89,7 @@ export async function analyzeVideo(file, clientVisualMetrics = null, onUploadPro
   }
 
   return postFormData("/api/analyze", formData, {
-    timeoutMessage: "分析等待时间较长，请换用 1 到 3 分钟、声音清晰的视频，或稍后重新上传。",
+    timeoutMessage: "完整视频分析超过 35 分钟仍未完成，请保留原视频并稍后重试。",
     defaultError: "视频分析失败，请确认后端服务已启动。",
     onUploadProgress,
     signal,
@@ -109,7 +109,7 @@ export async function analyzeFastVideo({ file, clientVisualMetrics, videoInfo, a
   }
 
   return postFormData("/api/analyze-fast", formData, {
-    timeoutMessage: "音频转写等待时间较长，请换用 1 到 3 分钟、声音清晰的视频，或稍后重新上传。",
+    timeoutMessage: "音频转写超过 35 分钟仍未完成，请保留原视频并稍后重试。",
     defaultError: "快速分析失败，请稍后重试。",
     onUploadProgress,
     signal,
