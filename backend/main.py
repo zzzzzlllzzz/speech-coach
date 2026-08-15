@@ -1,4 +1,5 @@
 from pathlib import Path
+import asyncio
 import json
 import logging
 import math
@@ -227,7 +228,7 @@ async def analyze_video(
         report = build_report_shell(saved_path.name)
 
         logger.info("视频分析")
-        video_info = inspect_video(saved_path)
+        video_info = await asyncio.to_thread(inspect_video, saved_path)
         if float(video_info.get("duration") or 0) > 30 * 60:
             raise HTTPException(status_code=400, detail="当前支持最长 30 分钟的视频。")
         visual_metrics = None
@@ -245,14 +246,14 @@ async def analyze_video(
                 visual_metrics = None
 
         if visual_metrics is None:
-            visual_metrics = analyze_visual_metrics(saved_path)
+            visual_metrics = await asyncio.to_thread(analyze_visual_metrics, saved_path)
 
         logger.info("提取音频")
-        audio_result = extract_audio(saved_path)
+        audio_result = await asyncio.to_thread(extract_audio, saved_path)
         extracted_audio_path = audio_result.audio_path
 
         logger.info("语音识别")
-        transcription = transcribe_audio(audio_result.audio_path)
+        transcription = await asyncio.to_thread(transcribe_audio, audio_result.audio_path)
         duration = video_info.get("duration") or audio_result.duration or 120
 
         if transcription["mock_mode"]:
@@ -263,12 +264,13 @@ async def analyze_video(
             )
 
         logger.info("文本分析")
-        transcript = analyze_text(
+        transcript = await asyncio.to_thread(
+            analyze_text,
             text=transcription["text"],
             duration=duration,
             mock_mode=transcription["mock_mode"],
         )
-        transcript["audio_metrics"] = analyze_audio_delivery(audio_result.audio_path)
+        transcript["audio_metrics"] = await asyncio.to_thread(analyze_audio_delivery, audio_result.audio_path)
 
         if audio_result.audio_path:
             transcript["audio_file"] = audio_result.audio_path.name
@@ -281,12 +283,12 @@ async def analyze_video(
         transcript["polish_error"] = transcription.get("polish_error")
 
         logger.info("评分")
-        scores = calculate_scores(transcript, visual_metrics)
+        scores = await asyncio.to_thread(calculate_scores, transcript, visual_metrics)
 
         logger.info("生成报告")
         report["video_info"] = video_info
         report["video_info"]["duration"] = duration
-        return enrich_report(report, transcript, visual_metrics, scores)
+        return await asyncio.to_thread(enrich_report, report, transcript, visual_metrics, scores)
     except UploadTooLargeError:
         raise HTTPException(status_code=413, detail="视频文件不能超过 500MB。")
     except HTTPException:
@@ -332,7 +334,7 @@ async def analyze_fast(
         transcription = {"text": "", "mock_mode": True, "source": "fallback", "error": "未检测到文本"}
         if audio_file is not None:
             audio_path = await save_upload_file(audio_file, max_bytes=MAX_FAST_AUDIO_SIZE)
-            transcription = transcribe_audio(audio_path)
+            transcription = await asyncio.to_thread(transcribe_audio, audio_path)
 
         if transcription["mock_mode"]:
             reason = transcription.get("error") or "未识别到有效语音"
@@ -341,12 +343,13 @@ async def analyze_fast(
                 detail=f"语音识别未完成：{reason}。系统已停止评分，避免生成不准确报告。",
             )
 
-        transcript = analyze_text(
+        transcript = await asyncio.to_thread(
+            analyze_text,
             text=transcription["text"],
             duration=duration,
             mock_mode=transcription["mock_mode"],
         )
-        transcript["audio_metrics"] = analyze_audio_delivery(audio_path)
+        transcript["audio_metrics"] = await asyncio.to_thread(analyze_audio_delivery, audio_path)
         transcript["source"] = transcription.get("source", "fallback")
         transcript["raw_text"] = transcription.get("raw_text", transcription["text"])
         transcript["polish_source"] = transcription.get("polish_source", "none")
@@ -366,7 +369,7 @@ async def analyze_fast(
                 "浏览器端 MediaPipe Tasks Vision 已完成大视频快速分析。",
             )
 
-        scores = calculate_scores(transcript, visual_metrics)
+        scores = await asyncio.to_thread(calculate_scores, transcript, visual_metrics)
         report["video_info"] = {
             "filename": filename,
             "duration": duration,
@@ -376,7 +379,7 @@ async def analyze_fast(
             "mock_mode": False,
             "fast_mode": True,
         }
-        report = enrich_report(report, transcript, visual_metrics, scores)
+        report = await asyncio.to_thread(enrich_report, report, transcript, visual_metrics, scores)
         report["analysis_status"]["upload"] = {
             "mode": "fast",
             "file_size": parsed_file_size,

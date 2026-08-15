@@ -1,4 +1,6 @@
 import os
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -87,6 +89,51 @@ class ApiSafetyTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 422)
         self.assertIn("停止评分", response.json()["detail"])
+
+    def test_health_stays_responsive_during_slow_transcription(self):
+        started = threading.Event()
+        release = threading.Event()
+        response_holder = {}
+
+        def slow_transcribe(_path):
+            started.set()
+            release.wait(timeout=3)
+            return {
+                "text": "大家好，今天我介绍我们的项目。最后，谢谢大家。",
+                "raw_text": "大家好，今天我介绍我们的项目。最后，谢谢大家。",
+                "mock_mode": False,
+                "source": "aliyun",
+                "polish_source": "none",
+                "polish_error": None,
+            }
+
+        def run_analysis():
+            response_holder["response"] = self.client.post(
+                "/api/analyze-fast",
+                data={
+                    "filename": "speech.mp4",
+                    "file_size": "1024",
+                    "video_info": '{"duration": 60}',
+                    "client_visual_metrics": '{"analysis_frame_count": 20, "analyzed_duration_seconds": 60}',
+                },
+                files={"audio_file": ("speech.wav", b"not-a-real-wave", "audio/wav")},
+            )
+
+        with patch("main.transcribe_audio", side_effect=slow_transcribe), patch(
+            "main.analyze_audio_delivery", return_value={"available": False}
+        ):
+            worker = threading.Thread(target=run_analysis)
+            worker.start()
+            self.assertTrue(started.wait(timeout=2))
+            before = time.monotonic()
+            health = self.client.get("/health")
+            elapsed = time.monotonic() - before
+            release.set()
+            worker.join(timeout=5)
+
+        self.assertEqual(health.status_code, 200)
+        self.assertLess(elapsed, 1)
+        self.assertEqual(response_holder["response"].status_code, 200)
 
     def test_untrusted_metrics_are_bounded(self):
         metrics = sanitize_visual_metrics(
