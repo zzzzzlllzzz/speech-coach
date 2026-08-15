@@ -7,14 +7,25 @@ function parseTimeToSeconds(value) {
   return parts[0] || 0;
 }
 
-function waitForEvent(target, event) {
+function waitForEvent(target, event, timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
-    const onError = () => reject(new Error("视频画面读取失败。"));
-    const onEvent = () => {
+    const cleanup = () => {
       target.removeEventListener(event, onEvent);
       target.removeEventListener("error", onError);
+      window.clearTimeout(timeoutId);
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("视频画面读取失败。"));
+    };
+    const onEvent = () => {
+      cleanup();
       resolve();
     };
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("视频画面读取超时。"));
+    }, timeoutMs);
     target.addEventListener(event, onEvent, { once: true });
     target.addEventListener("error", onError, { once: true });
   });
@@ -22,7 +33,7 @@ function waitForEvent(target, event) {
 
 async function seekVideo(video, time) {
   video.currentTime = time;
-  await waitForEvent(video, "seeked");
+  await waitForEvent(video, "seeked", 3500);
 }
 
 export async function getVideoInfo(file) {

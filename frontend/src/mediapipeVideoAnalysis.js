@@ -10,6 +10,10 @@ const WASM_URL = "/mediapipe/wasm";
 const POSE_MODEL_URL = "/mediapipe/models/pose_landmarker_lite.task";
 const HAND_MODEL_URL = "/mediapipe/models/hand_landmarker.task";
 const FACE_MODEL_URL = "/mediapipe/models/face_landmarker.task";
+const METADATA_TIMEOUT_MS = 10000;
+const SEEK_TIMEOUT_MS = 3500;
+const MODEL_INIT_TIMEOUT_MS = 30000;
+const ANALYSIS_TIMEOUT_MS = 75000;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -34,14 +38,17 @@ function throwIfAborted(signal) {
   }
 }
 
-function waitForEvent(target, event, signal = null) {
+function waitForEvent(target, event, signal = null, timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(createAbortError());
       return;
     }
 
-    const onError = () => reject(new Error("视频读取失败。"));
+    const onError = () => {
+      cleanup();
+      reject(new Error("视频读取失败。"));
+    };
     const onAbort = () => {
       cleanup();
       reject(createAbortError());
@@ -50,7 +57,12 @@ function waitForEvent(target, event, signal = null) {
       target.removeEventListener(event, onEvent);
       target.removeEventListener("error", onError);
       signal?.removeEventListener("abort", onAbort);
+      window.clearTimeout(timeoutId);
     };
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      reject(new Error(`等待视频${event === "seeked" ? "跳帧" : "加载"}超时。`));
+    }, timeoutMs);
     const onEvent = () => {
       cleanup();
       resolve();
@@ -68,14 +80,30 @@ async function createVideo(file, signal = null) {
   video.muted = true;
   video.playsInline = true;
   video.preload = "metadata";
-  await waitForEvent(video, "loadedmetadata", signal);
+  await waitForEvent(video, "loadedmetadata", signal, METADATA_TIMEOUT_MS);
   return { video, url };
 }
 
 async function seekVideo(video, time, signal = null) {
   if (Math.abs(video.currentTime - time) < 0.03) return;
   video.currentTime = time;
-  await waitForEvent(video, "seeked", signal);
+  await waitForEvent(video, "seeked", signal, SEEK_TIMEOUT_MS);
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      }
+    );
+  });
 }
 
 function faceBox(faceLandmarks) {
@@ -112,26 +140,36 @@ function expressionFeature(faceLandmarks, box) {
 
 export async function analyzeVideoWithMediaPipe(file, onProgress = () => {}, options = {}) {
   const signal = options.signal || null;
+  const startedAt = performance.now();
+  const analysisTimeoutMs = options.analysisTimeoutMs || ANALYSIS_TIMEOUT_MS;
   throwIfAborted(signal);
-  const vision = await FilesetResolver.forVisionTasks(WASM_URL);
+  const vision = await withTimeout(
+    FilesetResolver.forVisionTasks(WASM_URL),
+    MODEL_INIT_TIMEOUT_MS,
+    "MediaPipe 运行环境加载超时。"
+  );
   throwIfAborted(signal);
-  const [poseLandmarker, handLandmarker, faceLandmarker] = await Promise.all([
-    PoseLandmarker.createFromOptions(vision, {
-      baseOptions: { modelAssetPath: POSE_MODEL_URL, delegate: "CPU" },
-      runningMode: "VIDEO",
-      numPoses: 1,
-    }),
-    HandLandmarker.createFromOptions(vision, {
-      baseOptions: { modelAssetPath: HAND_MODEL_URL, delegate: "CPU" },
-      runningMode: "VIDEO",
-      numHands: 2,
-    }),
-    FaceLandmarker.createFromOptions(vision, {
-      baseOptions: { modelAssetPath: FACE_MODEL_URL, delegate: "CPU" },
-      runningMode: "VIDEO",
-      numFaces: 1,
-    }),
-  ]);
+  const [poseLandmarker, handLandmarker, faceLandmarker] = await withTimeout(
+    Promise.all([
+      PoseLandmarker.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: POSE_MODEL_URL, delegate: "CPU" },
+        runningMode: "VIDEO",
+        numPoses: 1,
+      }),
+      HandLandmarker.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: HAND_MODEL_URL, delegate: "CPU" },
+        runningMode: "VIDEO",
+        numHands: 2,
+      }),
+      FaceLandmarker.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: FACE_MODEL_URL, delegate: "CPU" },
+        runningMode: "VIDEO",
+        numFaces: 1,
+      }),
+    ]),
+    MODEL_INIT_TIMEOUT_MS,
+    "MediaPipe 模型初始化超时。"
+  );
 
   throwIfAborted(signal);
   const { video, url } = await createVideo(file, signal);
@@ -154,6 +192,9 @@ export async function analyzeVideoWithMediaPipe(file, onProgress = () => {}, opt
   try {
     for (let index = 0; index < frameCount; index += 1) {
       throwIfAborted(signal);
+      if (performance.now() - startedAt > analysisTimeoutMs) {
+        throw new Error("浏览器视觉分析超过时间预算，已切换后端分析。");
+      }
       const time = Math.min(index * frameInterval, Math.max(duration - 0.05, 0));
       await seekVideo(video, time, signal);
       throwIfAborted(signal);

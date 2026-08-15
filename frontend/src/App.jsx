@@ -107,6 +107,11 @@ function isLikelyMobileDevice() {
   );
 }
 
+function isSafariBrowser() {
+  const userAgent = window.navigator.userAgent;
+  return /Safari/i.test(userAgent) && !/Chrome|Chromium|CriOS|Edg|OPR/i.test(userAgent);
+}
+
 export default function App() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -271,7 +276,7 @@ export default function App() {
       if ((videoInfo.duration || 0) > MAX_VIDEO_DURATION_SECONDS) {
         throw new Error("当前支持最长 30 分钟的视频，请先裁剪到核心演讲片段后再分析。");
       }
-      const lightMode = isLikelyMobileDevice();
+      const lightMode = isLikelyMobileDevice() || isSafariBrowser();
       const isLongVideo = shouldStreamFullVideo(videoInfo.duration, selectedFile.size);
       const fastMode = !isLongVideo;
       let clientVisualMetrics = null;
