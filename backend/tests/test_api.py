@@ -72,6 +72,39 @@ class ApiSafetyTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_background_analysis_job_returns_result_without_long_request(self):
+        previous = os.environ.get("USE_MOCK")
+        os.environ["USE_MOCK"] = "true"
+        try:
+            started = self.client.post(
+                "/api/analyze-jobs",
+                files={"file": ("speech.mp4", b"small-test-video", "video/mp4")},
+            )
+            self.assertEqual(started.status_code, 202)
+            job_id = started.json()["job_id"]
+
+            payload = None
+            for _ in range(30):
+                status = self.client.get(f"/api/analyze-jobs/{job_id}")
+                self.assertEqual(status.status_code, 200)
+                payload = status.json()
+                if payload["status"] in {"completed", "failed"}:
+                    break
+                time.sleep(0.02)
+
+            self.assertEqual(payload["status"], "completed")
+            self.assertEqual(payload["progress"], 100)
+            self.assertIn("result", payload)
+        finally:
+            if previous is None:
+                os.environ.pop("USE_MOCK", None)
+            else:
+                os.environ["USE_MOCK"] = previous
+
+    def test_unknown_background_job_is_not_exposed(self):
+        response = self.client.get("/api/analyze-jobs/not-a-real-job")
+        self.assertEqual(response.status_code, 404)
+
     def test_fast_analysis_refuses_fake_success_when_speech_fails(self):
         failed = {
             "text": "", "raw_text": "", "mock_mode": True,

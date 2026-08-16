@@ -96,6 +96,72 @@ export async function analyzeVideo(file, clientVisualMetrics = null, onUploadPro
   });
 }
 
+export async function startVideoAnalysisJob(file, clientVisualMetrics = null, onUploadProgress = null, signal = null) {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (clientVisualMetrics) {
+    formData.append("client_visual_metrics", JSON.stringify(clientVisualMetrics));
+  }
+
+  return postFormData("/api/analyze-jobs", formData, {
+    timeoutMessage: "视频上传超过 35 分钟仍未完成，请检查网络后重试。",
+    defaultError: "视频后台分析任务创建失败，请稍后重试。",
+    onUploadProgress,
+    signal,
+  });
+}
+
+function waitForDelay(delayMs, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(createAbortError());
+      return;
+    }
+    const handleAbort = () => {
+      window.clearTimeout(timer);
+      reject(createAbortError());
+    };
+    const timer = window.setTimeout(() => {
+      signal?.removeEventListener("abort", handleAbort);
+      resolve();
+    }, delayMs);
+    signal?.addEventListener("abort", handleAbort, { once: true });
+  });
+}
+
+export async function waitForVideoAnalysisJob(jobId, onStatus = null, signal = null) {
+  const deadline = Date.now() + ANALYZE_TIMEOUT_MS;
+  const safeJobId = encodeURIComponent(jobId);
+
+  while (Date.now() < deadline) {
+    if (signal?.aborted) throw createAbortError();
+    let response;
+    try {
+      response = await fetch(`${API_BASE_URL}/api/analyze-jobs/${safeJobId}`, {
+        cache: "no-store",
+        signal,
+      });
+    } catch (error) {
+      if (error.name === "AbortError") throw error;
+      await waitForDelay(3000, signal);
+      continue;
+    }
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.detail || "无法读取后台分析进度，请重新上传视频。");
+    }
+    onStatus?.(payload);
+    if (payload.status === "completed" && payload.result) return payload.result;
+    if (payload.status === "failed") {
+      throw new Error(payload.error || "视频后台分析失败，请检查视频后重试。");
+    }
+    await waitForDelay(3000, signal);
+  }
+
+  throw new Error("视频后台分析超过 35 分钟仍未完成，请保留原视频并稍后重试。");
+}
+
 export async function analyzeFastVideo({ file, clientVisualMetrics, videoInfo, audioFile = null, onUploadProgress = null, signal = null }) {
   const formData = new FormData();
   formData.append("filename", file.name);

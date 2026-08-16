@@ -4,6 +4,8 @@ import json
 import logging
 import math
 import os
+import time
+import uuid
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,6 +34,10 @@ MAX_UPLOAD_SIZE = 500 * 1024 * 1024
 MAX_FAST_AUDIO_SIZE = 80 * 1024 * 1024
 MAX_JSON_FIELD_SIZE = 64 * 1024
 MAX_SCRIPT_TEXT_LENGTH = 20000
+MAX_ANALYSIS_JOBS = 20
+MAX_ACTIVE_ANALYSIS_JOBS = 2
+ANALYSIS_JOBS: dict[str, dict] = {}
+ANALYSIS_TASKS: set[asyncio.Task] = set()
 
 
 class ScriptOptimizationRequest(BaseModel):
@@ -145,6 +151,28 @@ def cleanup_file(path: Path | None) -> None:
             logger.warning("临时文件清理失败：%s", path.name)
 
 
+def update_analysis_job(job_id: str, **values) -> None:
+    job = ANALYSIS_JOBS.get(job_id)
+    if job is not None:
+        job.update(values)
+        job["updated_at"] = time.time()
+
+
+def trim_analysis_jobs() -> None:
+    if len(ANALYSIS_JOBS) < MAX_ANALYSIS_JOBS:
+        return
+    finished = sorted(
+        (
+            (job_id, job)
+            for job_id, job in ANALYSIS_JOBS.items()
+            if job.get("status") in {"completed", "failed"}
+        ),
+        key=lambda item: item[1].get("updated_at", 0),
+    )
+    for job_id, _job in finished[: max(1, len(ANALYSIS_JOBS) - MAX_ANALYSIS_JOBS + 1)]:
+        ANALYSIS_JOBS.pop(job_id, None)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=(cors_origins := get_cors_origins()),
@@ -207,26 +235,18 @@ def optimize_script_endpoint(payload: ScriptOptimizationRequest) -> dict:
         raise HTTPException(status_code=502, detail="演讲稿优化服务暂时不可用，请稍后重试。")
 
 
-@app.post("/api/analyze")
-async def analyze_video(
-    file: UploadFile = File(...),
-    client_visual_metrics: str | None = Form(None),
-) -> dict:
-    saved_path = None
+async def analyze_saved_video(saved_path: Path, client_visual_metrics: str | None = None, job_id: str | None = None) -> dict:
     extracted_audio_path = None
 
     try:
-        validate_upload(file)
-
-        logger.info("保存视频")
-        saved_path = await save_upload_file(file, max_bytes=MAX_UPLOAD_SIZE)
-
         if use_mock_mode():
             logger.info("USE_MOCK=true，返回演示模式报告")
             return build_fallback_report(saved_path.name, "USE_MOCK=true，已启用完整演示模式。")
 
         report = build_report_shell(saved_path.name)
 
+        if job_id:
+            update_analysis_job(job_id, stage="正在检查视频信息", progress=10)
         logger.info("视频分析")
         video_info = await asyncio.to_thread(inspect_video, saved_path)
         if float(video_info.get("duration") or 0) > 30 * 60:
@@ -246,12 +266,18 @@ async def analyze_video(
                 visual_metrics = None
 
         if visual_metrics is None:
+            if job_id:
+                update_analysis_job(job_id, stage="正在分析画面关键点", progress=22)
             visual_metrics = await asyncio.to_thread(analyze_visual_metrics, saved_path)
 
+        if job_id:
+            update_analysis_job(job_id, stage="正在提取完整音轨", progress=35)
         logger.info("提取音频")
         audio_result = await asyncio.to_thread(extract_audio, saved_path)
         extracted_audio_path = audio_result.audio_path
 
+        if job_id:
+            update_analysis_job(job_id, stage="正在识别完整音轨，长演讲需要更久", progress=52)
         logger.info("语音识别")
         transcription = await asyncio.to_thread(transcribe_audio, audio_result.audio_path)
         duration = video_info.get("duration") or audio_result.duration or 120
@@ -264,6 +290,8 @@ async def analyze_video(
             )
 
         logger.info("文本分析")
+        if job_id:
+            update_analysis_job(job_id, stage="正在分析语言结构和表达节奏", progress=82)
         transcript = await asyncio.to_thread(
             analyze_text,
             text=transcription["text"],
@@ -283,6 +311,8 @@ async def analyze_video(
         transcript["polish_error"] = transcription.get("polish_error")
 
         logger.info("评分")
+        if job_id:
+            update_analysis_job(job_id, stage="正在匹配问题并生成训练建议", progress=92)
         scores = await asyncio.to_thread(calculate_scores, transcript, visual_metrics)
 
         logger.info("生成报告")
@@ -302,6 +332,106 @@ async def analyze_video(
     finally:
         cleanup_file(saved_path)
         cleanup_file(extracted_audio_path)
+
+
+async def run_analysis_job(job_id: str, saved_path: Path, client_visual_metrics: str | None) -> None:
+    update_analysis_job(job_id, status="processing", stage="视频已上传，准备开始分析", progress=5)
+    try:
+        report = await analyze_saved_video(saved_path, client_visual_metrics, job_id)
+        update_analysis_job(
+            job_id,
+            status="completed",
+            stage="分析完成",
+            progress=100,
+            result=report,
+        )
+    except HTTPException as exc:
+        update_analysis_job(
+            job_id,
+            status="failed",
+            stage="分析失败",
+            error=str(exc.detail),
+            error_status=exc.status_code,
+        )
+    except Exception:
+        logger.exception("后台视频分析任务失败")
+        update_analysis_job(
+            job_id,
+            status="failed",
+            stage="分析失败",
+            error="视频分析未完成，请检查视频声音和编码后重试。",
+            error_status=502,
+        )
+
+
+@app.post("/api/analyze")
+async def analyze_video(
+    file: UploadFile = File(...),
+    client_visual_metrics: str | None = Form(None),
+) -> dict:
+    saved_path = None
+    try:
+        validate_upload(file)
+        logger.info("保存视频")
+        saved_path = await save_upload_file(file, max_bytes=MAX_UPLOAD_SIZE)
+        return await analyze_saved_video(saved_path, client_visual_metrics)
+    except UploadTooLargeError:
+        cleanup_file(saved_path)
+        raise HTTPException(status_code=413, detail="视频文件不能超过 500MB。")
+
+
+@app.post("/api/analyze-jobs", status_code=202)
+async def create_analysis_job(
+    file: UploadFile = File(...),
+    client_visual_metrics: str | None = Form(None),
+) -> dict:
+    saved_path = None
+    active_jobs = sum(
+        job.get("status") in {"queued", "processing"} for job in ANALYSIS_JOBS.values()
+    )
+    if active_jobs >= MAX_ACTIVE_ANALYSIS_JOBS:
+        raise HTTPException(status_code=429, detail="当前已有视频正在分析，请等待当前任务完成后再上传。")
+    try:
+        validate_upload(file)
+        if client_visual_metrics:
+            sanitize_visual_metrics(parse_json_field(client_visual_metrics))
+        logger.info("保存后台分析视频")
+        saved_path = await save_upload_file(file, max_bytes=MAX_UPLOAD_SIZE)
+    except UploadTooLargeError:
+        cleanup_file(saved_path)
+        raise HTTPException(status_code=413, detail="视频文件不能超过 500MB。")
+    except Exception:
+        cleanup_file(saved_path)
+        raise
+
+    trim_analysis_jobs()
+    job_id = uuid.uuid4().hex
+    now = time.time()
+    ANALYSIS_JOBS[job_id] = {
+        "job_id": job_id,
+        "status": "queued",
+        "stage": "视频上传完成，等待分析",
+        "progress": 1,
+        "created_at": now,
+        "updated_at": now,
+    }
+    try:
+        task = asyncio.create_task(run_analysis_job(job_id, saved_path, client_visual_metrics))
+        ANALYSIS_TASKS.add(task)
+        task.add_done_callback(ANALYSIS_TASKS.discard)
+    except Exception:
+        ANALYSIS_JOBS.pop(job_id, None)
+        cleanup_file(saved_path)
+        raise
+    return {"job_id": job_id, "status": "queued", "stage": "视频上传完成，等待分析", "progress": 1}
+
+
+@app.get("/api/analyze-jobs/{job_id}")
+def get_analysis_job(job_id: str) -> dict:
+    job = ANALYSIS_JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="分析任务不存在或服务已重启，请重新上传视频。")
+    return job
 
 
 @app.post("/api/analyze-fast")

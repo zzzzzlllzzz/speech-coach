@@ -1,5 +1,11 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { analyzeFastVideo, analyzeVideo, getServiceStatus } from "./api";
+import {
+  analyzeFastVideo,
+  analyzeVideo,
+  getServiceStatus,
+  startVideoAnalysisJob,
+  waitForVideoAnalysisJob,
+} from "./api";
 import { attachIssueFrames, getVideoInfo } from "./videoFrames";
 import UploadPanel from "./components/UploadPanel";
 import ProgressPanel from "./components/ProgressPanel";
@@ -323,9 +329,16 @@ export default function App() {
         }
       } else {
         setProgress((current) => Math.max(current, 72));
-        setAnalysisStep("长视频已完成全程抽帧，正在流式上传并提取完整音频");
-        result = await analyzeVideo(selectedFile, clientVisualMetrics, (ratio) => {
+        setAnalysisStep("长视频已完成全程抽帧，正在上传并创建后台分析任务");
+        const job = await startVideoAnalysisJob(selectedFile, clientVisualMetrics, (ratio) => {
           setProgress((current) => Math.max(current, 72 + Math.round(ratio * 12)));
+        }, controller.signal);
+        setProgress((current) => Math.max(current, 85));
+        setAnalysisStep("视频上传完成，后台正在识别完整音轨");
+        result = await waitForVideoAnalysisJob(job.job_id, (status) => {
+          if (status.stage) setAnalysisStep(status.stage);
+          const backendProgress = Number(status.progress || 0);
+          setProgress((current) => Math.max(current, Math.min(95, 85 + Math.round(backendProgress * 0.1))));
         }, controller.signal);
       }
 
