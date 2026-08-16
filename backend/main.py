@@ -235,15 +235,21 @@ def optimize_script_endpoint(payload: ScriptOptimizationRequest) -> dict:
         raise HTTPException(status_code=502, detail="演讲稿优化服务暂时不可用，请稍后重试。")
 
 
-async def analyze_saved_video(saved_path: Path, client_visual_metrics: str | None = None, job_id: str | None = None) -> dict:
+async def analyze_saved_video(
+    saved_path: Path,
+    client_visual_metrics: str | None = None,
+    job_id: str | None = None,
+    display_filename: str | None = None,
+) -> dict:
     extracted_audio_path = None
+    report_filename = Path(display_filename or saved_path.name).name[:255]
 
     try:
         if use_mock_mode():
             logger.info("USE_MOCK=true，返回演示模式报告")
-            return build_fallback_report(saved_path.name, "USE_MOCK=true，已启用完整演示模式。")
+            return build_fallback_report(report_filename, "USE_MOCK=true，已启用完整演示模式。")
 
-        report = build_report_shell(saved_path.name)
+        report = build_report_shell(report_filename)
 
         if job_id:
             update_analysis_job(job_id, stage="正在检查视频信息", progress=10)
@@ -334,10 +340,20 @@ async def analyze_saved_video(saved_path: Path, client_visual_metrics: str | Non
         cleanup_file(extracted_audio_path)
 
 
-async def run_analysis_job(job_id: str, saved_path: Path, client_visual_metrics: str | None) -> None:
+async def run_analysis_job(
+    job_id: str,
+    saved_path: Path,
+    client_visual_metrics: str | None,
+    display_filename: str,
+) -> None:
     update_analysis_job(job_id, status="processing", stage="视频已上传，准备开始分析", progress=5)
     try:
-        report = await analyze_saved_video(saved_path, client_visual_metrics, job_id)
+        report = await analyze_saved_video(
+            saved_path,
+            client_visual_metrics,
+            job_id,
+            display_filename,
+        )
         update_analysis_job(
             job_id,
             status="completed",
@@ -372,9 +388,14 @@ async def analyze_video(
     saved_path = None
     try:
         validate_upload(file)
+        display_filename = Path(file.filename or "video.mp4").name[:255]
         logger.info("保存视频")
         saved_path = await save_upload_file(file, max_bytes=MAX_UPLOAD_SIZE)
-        return await analyze_saved_video(saved_path, client_visual_metrics)
+        return await analyze_saved_video(
+            saved_path,
+            client_visual_metrics,
+            display_filename=display_filename,
+        )
     except UploadTooLargeError:
         cleanup_file(saved_path)
         raise HTTPException(status_code=413, detail="视频文件不能超过 500MB。")
@@ -386,6 +407,7 @@ async def create_analysis_job(
     client_visual_metrics: str | None = Form(None),
 ) -> dict:
     saved_path = None
+    display_filename = Path(file.filename or "video.mp4").name[:255]
     active_jobs = sum(
         job.get("status") in {"queued", "processing"} for job in ANALYSIS_JOBS.values()
     )
@@ -416,7 +438,9 @@ async def create_analysis_job(
         "updated_at": now,
     }
     try:
-        task = asyncio.create_task(run_analysis_job(job_id, saved_path, client_visual_metrics))
+        task = asyncio.create_task(
+            run_analysis_job(job_id, saved_path, client_visual_metrics, display_filename)
+        )
         ANALYSIS_TASKS.add(task)
         task.add_done_callback(ANALYSIS_TASKS.discard)
     except Exception:

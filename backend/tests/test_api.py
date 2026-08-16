@@ -95,6 +95,7 @@ class ApiSafetyTests(unittest.TestCase):
             self.assertEqual(payload["status"], "completed")
             self.assertEqual(payload["progress"], 100)
             self.assertIn("result", payload)
+            self.assertEqual(payload["result"]["video_info"]["filename"], "speech.mp4")
         finally:
             if previous is None:
                 os.environ.pop("USE_MOCK", None)
