@@ -14,6 +14,7 @@ import AppHeader from "./components/AppHeader";
 import HistoryDashboard from "./components/HistoryDashboard";
 import OnboardingGuide from "./components/OnboardingGuide";
 import TrainingGuide from "./components/TrainingGuide";
+import ExpressionGame from "./components/ExpressionGame";
 import { MAX_VIDEO_DURATION_SECONDS, shouldStreamFullVideo } from "./analysisPlan";
 import { DEFAULT_TRAINING_CONTEXT } from "./trainingPlan";
 
@@ -496,6 +497,9 @@ export default function App() {
       )}
       {activeView === "guide" && (
         <TrainingGuide onStart={handleStartTraining} onShowOnboarding={() => setShowOnboarding(true)} />
+      )}
+      {activeView === "game" && (
+        <ExpressionGame history={history} onStartVideo={handleStartTraining} />
       )}
       {activeView === "train" && stage === "upload" && (
         <UploadPanel

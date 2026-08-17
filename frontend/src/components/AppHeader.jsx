@@ -1,5 +1,6 @@
 const navItems = [
   ["train", "开始训练"],
+  ["game", "表达闯关"],
   ["history", "能力成长"],
   ["guide", "训练指南"],
 ];
