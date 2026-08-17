@@ -44,7 +44,10 @@ assert.equal(dayTwo.sessions, 2);
 assert.equal(getGameLevel(245).level, 3);
 
 const recommended = selectSessionCards(EXPRESSION_CARDS, emptyGameProgress(), "gesture", 5);
+assert.equal(EXPRESSION_CARDS.length, 30);
+assert.equal(recommended.length, 5);
 assert.ok(recommended.some((card) => card.dimension === "gesture"));
+assert.ok(new Set(recommended.map((card) => card.dimension)).size >= 3);
 assert.equal(getPreferredDimension([{ report: { scores } }]), "camera_contact");
 
 console.log("analysisPlan tests passed");

@@ -169,6 +169,198 @@ export const EXPRESSION_CARDS = [
     memoryHook: "好结尾不是“希望”，而是“何时做什么”。",
     drill: "给你的下次演讲补一句“今天结束后，请先……”。",
   },
+  {
+    id: "audience-language",
+    dimension: "content",
+    category: "听众",
+    title: "把术语翻译成人话",
+    prompt: "向完全不懂技术的听众介绍“云存储”，哪种说法更容易理解？",
+    options: ["它采用分布式对象存储架构。", "可以把它想成一个随时能打开的网络保险柜。", "它的底层具有高可用和弹性扩容能力。"],
+    correct: 1,
+    explanation: "用听众熟悉的事物作类比，能快速降低理解门槛。",
+    memoryHook: "专家讲原理，高手先让人听懂。",
+    drill: "挑一个专业词，不用术语，像向十岁孩子一样解释它。",
+  },
+  {
+    id: "pyramid-answer",
+    dimension: "content",
+    category: "即兴",
+    title: "即兴回答先搭骨架",
+    prompt: "被临时问到“为什么选择这个方案”，最稳妥的回答顺序是？",
+    options: ["想到哪说到哪，细节越多越好。", "先讲背景，再回忆过程，最后看时间是否够。", "先给结论，再说两点理由，最后重申建议。"],
+    correct: 2,
+    explanation: "结论—理由—重申是紧张时也容易执行的最小结构。",
+    memoryHook: "先答问题，再解释答案。",
+    drill: "用“我的结论是……原因有两点……”回答一个简单问题。",
+  },
+  {
+    id: "transition-summary",
+    dimension: "content",
+    category: "转场",
+    title: "换章节前先收一下",
+    prompt: "从问题分析转到解决方案时，哪句转场最自然？",
+    options: ["好了，下面再说别的。", "刚才我们看到了两个核心问题，接下来逐一给出解决办法。", "解决方案有很多，我挑几个讲。"],
+    correct: 1,
+    explanation: "先总结上一段，再预告下一段，听众能清楚感知结构变化。",
+    memoryHook: "转场要一手收旧，一手开新。",
+    drill: "用“刚才……接下来……”把两个话题连成一句话。",
+  },
+  {
+    id: "voice-projection",
+    dimension: "voice",
+    category: "音量",
+    title: "声音送到最后一排",
+    prompt: "在没有麦克风的教室讲话，怎样提高音量最健康有效？",
+    options: ["挤紧喉咙大喊。", "吸气后保持身体打开，把声音送向最后一排。", "每句话都提高音调。"],
+    correct: 1,
+    explanation: "气息支撑和明确的声音目标，比单纯挤压喉咙更清楚也更持久。",
+    memoryHook: "放大声音靠气息，不靠嗓子硬扛。",
+    drill: "深吸一口气，用清晰而不喊叫的声音说“最后一排能听见吗”。",
+  },
+  {
+    id: "intonation-question",
+    dimension: "voice",
+    category: "语调",
+    title: "别把所有句子说成直线",
+    prompt: "想让反问句“难道我们只能等待吗”更有感染力，应该怎样处理？",
+    options: ["全句平铺直叙。", "前半句稍抬语调，重读“只能”，句末留出停顿。", "快速小声说完。"],
+    correct: 1,
+    explanation: "语调起伏、关键词重音和句后停顿共同传达反问的力量。",
+    memoryHook: "语调表达态度，文字只负责内容。",
+    drill: "先平读，再带着不甘的情绪读一遍这句反问。",
+  },
+  {
+    id: "breath-phrase",
+    dimension: "voice",
+    category: "气息",
+    title: "在意思结束处换气",
+    prompt: "长句讲到一半气不够，最好的处理方式是什么？",
+    options: ["坚持说完，后半句越来越小声。", "提前按意思分组，在短语边界自然换气。", "每隔三四个字固定吸气。"],
+    correct: 1,
+    explanation: "按意群换气既保护声音，也不会破坏听众对句意的理解。",
+    memoryHook: "换气跟着意思走，不跟着字数走。",
+    drill: "给一个长句画两条斜线，只在斜线处换气后读完。",
+  },
+  {
+    id: "eye-three-zones",
+    dimension: "camera_contact",
+    category: "目光",
+    title: "照顾不同区域的听众",
+    prompt: "面对较宽的会场，目光应该怎样移动？",
+    options: ["只看最中间最友好的人。", "快速来回扫视全场。", "一次看左、中、右一个区域，各说完整一句再自然转换。"],
+    correct: 2,
+    explanation: "分区并保持一个完整意思单位，能让每个区域都感到被交流。",
+    memoryHook: "目光不是扫场，而是一句送给一群人。",
+    drill: "选左、中、右三个点，每看一个点说完一句话。",
+  },
+  {
+    id: "notes-glance",
+    dimension: "camera_contact",
+    category: "提词",
+    title: "提纲只写触发词",
+    prompt: "为了减少低头读稿，提纲最适合写成什么样？",
+    options: ["完整逐字稿，字号尽量小。", "每段只写关键词、数字和转场提示。", "只写演讲标题，其他全部临场发挥。"],
+    correct: 1,
+    explanation: "关键词能唤起内容，又不会诱使你逐字朗读。",
+    memoryHook: "提纲负责提醒，不负责替你讲话。",
+    drill: "把一段三句话的稿子压缩成三个关键词，再抬头复述。",
+  },
+  {
+    id: "online-lens",
+    dimension: "camera_contact",
+    category: "镜头",
+    title: "线上发言看镜头",
+    prompt: "视频会议中讲关键结论时，眼睛应该看哪里？",
+    options: ["一直看自己的小窗口。", "看摄像头，把它当成对方的眼睛。", "看屏幕角落避免紧张。"],
+    correct: 1,
+    explanation: "看镜头会让远端听众感到你在直视他们，关键句尤其有效。",
+    memoryHook: "看屏幕是你在看人，看镜头是对方看见你在看他。",
+    drill: "在镜头旁贴一个小点，看着它完整说出你的结论。",
+  },
+  {
+    id: "audience-reaction",
+    dimension: "camera_contact",
+    category: "互动",
+    title: "看见听众的反馈",
+    prompt: "发现听众皱眉、似乎没听懂时，最好的反应是？",
+    options: ["无视反馈，严格按稿讲完。", "立刻质问大家为什么不认真。", "放慢速度，换一个例子，并用一句话确认理解。"],
+    correct: 2,
+    explanation: "目光交流不仅是看人，还要根据反馈及时调整表达。",
+    memoryHook: "交流不是把话说完，而是确认对方收到。",
+    drill: "练习说“换个更简单的例子”，然后用一个生活场景重讲观点。",
+  },
+  {
+    id: "gesture-size-match",
+    dimension: "gesture",
+    category: "手势",
+    title: "动作大小匹配场地",
+    prompt: "在大型舞台讲“我们需要更大的改变”，手势怎样更合适？",
+    options: ["只动手指，动作越小越稳重。", "用清晰舒展的动作打开身体，但不过度挥舞。", "双手一直插在口袋里。"],
+    correct: 1,
+    explanation: "场地越大，动作幅度需要适当放大，才能被远处观众读懂。",
+    memoryHook: "小房间用小动作，大舞台让动作被看见。",
+    drill: "同一句话分别用小、中、大三种动作幅度演一遍。",
+  },
+  {
+    id: "avoid-face-touch",
+    dimension: "gesture",
+    category: "习惯",
+    title: "减少紧张小动作",
+    prompt: "讲话时总摸头发、碰脸，最有效的改法是什么？",
+    options: ["强迫双手完全不动。", "给双手一个自然等待位置，只在关键词时做设计好的动作。", "拿更多东西在手上转移注意。"],
+    correct: 1,
+    explanation: "明确的手势起点和少量计划动作，比单纯压制习惯更容易坚持。",
+    memoryHook: "双手有归处，紧张才不会到处跑。",
+    drill: "双手自然放在腹前，讲 20 秒，只允许做一次有意义的动作。",
+  },
+  {
+    id: "prop-use",
+    dimension: "gesture",
+    category: "道具",
+    title: "道具用完就放下",
+    prompt: "展示完一个产品后，应该怎样处理手中的道具？",
+    options: ["继续拿着它直到演讲结束。", "边说边反复转动它。", "展示结束后平稳放回，让注意力重新回到观点。"],
+    correct: 2,
+    explanation: "无关阶段继续把玩道具会分散听众注意力，也容易暴露紧张。",
+    memoryHook: "道具出场要有任务，任务完成就退场。",
+    drill: "拿一本书做 5 秒展示，放稳后看向听众继续说话。",
+  },
+  {
+    id: "nervous-sway",
+    dimension: "posture",
+    category: "稳定",
+    title: "停止无意识摇晃",
+    prompt: "回看视频发现身体一直左右晃，下一次训练该怎么做？",
+    options: ["双腿完全绷紧。", "在地面设两个脚位，先稳定重心，再练上半身表达。", "加快走动，让摇晃不明显。"],
+    correct: 1,
+    explanation: "脚位提示能建立稳定基线，再逐渐加入有目的的移动。",
+    memoryHook: "先消除无目的的动，再增加有目的的动。",
+    drill: "在两脚位置贴标记，站稳讲 30 秒并保持膝盖放松。",
+  },
+  {
+    id: "seated-posture",
+    dimension: "posture",
+    category: "坐姿",
+    title: "坐着汇报也要有能量",
+    prompt: "线上会议坐着发言，哪种姿态最好？",
+    options: ["身体后仰靠住椅背。", "坐在椅子前部，脊柱自然挺直，双脚稳定落地。", "身体尽量贴近摄像头。"],
+    correct: 1,
+    explanation: "稳定而略微向前的坐姿能改善气息，也传达投入感。",
+    memoryHook: "坐稳、坐直、微微向交流方向打开。",
+    drill: "调整椅子和镜头，双脚落地，用完整气息说三句话。",
+  },
+  {
+    id: "stage-turn",
+    dimension: "posture",
+    category: "舞台",
+    title: "转身后再开口",
+    prompt: "需要转向屏幕指示图表时，怎样做最清楚？",
+    options: ["背对观众一边看屏幕一边讲。", "先停顿并转身指示，回到观众方向后继续完整表达。", "快速来回转头，同时不停说话。"],
+    correct: 1,
+    explanation: "动作与语言分开能避免声音丢失，也减少慌乱感。",
+    memoryHook: "脚步先到位，语言再出发。",
+    drill: "练习“停—转—指—回—说”五步动作，过程不抢话。",
+  },
 ];
 
 export function emptyGameProgress() {
@@ -197,15 +389,35 @@ function addDays(key, amount) {
 export function selectSessionCards(cards, progress, preferredDimension, count = 5) {
   const today = dateKey();
   const skills = progress?.skills || {};
+  const dailyJitter = (id) => {
+    let hash = 0;
+    for (const character of `${today}-${id}`) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+    return (hash % 900) / 100;
+  };
   const ranked = cards.map((card, index) => {
     const skill = skills[card.id];
     const unseen = !skill;
     const due = !skill?.nextReview || skill.nextReview <= today;
     const weak = (skill?.wrong || 0) * 12 - (skill?.mastery || 0) * 3;
     const recommended = card.dimension === preferredDimension ? 18 : 0;
-    return { card, score: (due ? 40 : 0) + (unseen ? 24 : 0) + weak + recommended - index * 0.01 };
+    return { card, score: (due ? 40 : 0) + (unseen ? 24 : 0) + weak + recommended + dailyJitter(card.id) - index * 0.001 };
   });
-  return ranked.sort((a, b) => b.score - a.score).slice(0, count).map(({ card }) => card);
+  ranked.sort((a, b) => b.score - a.score);
+  const selected = [];
+  const dimensionCounts = {};
+  for (const item of ranked) {
+    if (selected.length >= count) break;
+    if ((dimensionCounts[item.card.dimension] || 0) >= 2) continue;
+    selected.push(item.card);
+    dimensionCounts[item.card.dimension] = (dimensionCounts[item.card.dimension] || 0) + 1;
+  }
+  if (selected.length < count) {
+    for (const { card } of ranked) {
+      if (selected.length >= count) break;
+      if (!selected.some((item) => item.id === card.id)) selected.push(card);
+    }
+  }
+  return selected;
 }
 
 export function recordAnswer(progress, cardId, isCorrect, today = dateKey()) {
