@@ -496,7 +496,7 @@ export default function App() {
         <HistoryDashboard history={history} onOpen={handleOpenHistory} onStart={handleStartTraining} />
       )}
       {activeView === "guide" && (
-        <TrainingGuide onStart={handleStartTraining} onShowOnboarding={() => setShowOnboarding(true)} />
+        <TrainingGuide onStart={handleStartTraining} onGame={() => handleNavigate("game")} onShowOnboarding={() => setShowOnboarding(true)} />
       )}
       {activeView === "game" && (
         <ExpressionGame history={history} onStartVideo={handleStartTraining} />
